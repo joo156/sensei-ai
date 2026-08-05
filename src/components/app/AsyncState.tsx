@@ -9,7 +9,13 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export function LoadingState({ label = "Loading…", className }: { label?: string; className?: string }) {
+export function LoadingState({
+  label = "Loading…",
+  className,
+}: {
+  label?: string;
+  className?: string;
+}) {
   return (
     <div
       role="status"
@@ -69,7 +75,9 @@ export function EmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center justify-center gap-3 py-14 text-center", className)}>
+    <div
+      className={cn("flex flex-col items-center justify-center gap-3 py-14 text-center", className)}
+    >
       <span className="bg-muted text-muted-foreground flex size-11 items-center justify-center rounded-2xl">
         <Inbox className="size-5" />
       </span>
@@ -112,7 +120,8 @@ export function AsyncSection<T>({
 }: AsyncSectionProps<T>) {
   if (isLoading) return <LoadingState label={loadingLabel} />;
   if (error) return <ErrorState title={errorTitle} message={error.message} onRetry={onRetry} />;
-  if (data === undefined) return <EmptyState title={emptyTitle} message={emptyMessage} action={emptyAction} />;
+  if (data === undefined)
+    return <EmptyState title={emptyTitle} message={emptyMessage} action={emptyAction} />;
   if (isEmpty?.(data))
     return <EmptyState title={emptyTitle} message={emptyMessage} action={emptyAction} />;
   return <>{children(data)}</>;

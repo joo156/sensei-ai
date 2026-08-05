@@ -1,12 +1,4 @@
-import {
-  Bell,
-  CheckCheck,
-  Download,
-  ShieldAlert,
-  ShieldX,
-  Sparkles,
-  Inbox,
-} from "lucide-react";
+import { Bell, CheckCheck, Download, ShieldAlert, ShieldX, Sparkles, Inbox } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -52,7 +44,8 @@ export function NotificationCenter() {
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       notify.success("All notifications marked as read");
     },
-    onError: (err: Error) => notify.error("Could not update notifications", { description: err.message }),
+    onError: (err: Error) =>
+      notify.error("Could not update notifications", { description: err.message }),
   });
 
   const items = data?.notifications ?? [];
@@ -93,7 +86,11 @@ export function NotificationCenter() {
             />
           )}
           {!isPending && !error && items.length === 0 && (
-            <EmptyState title="Nothing here yet" message="New activity will show up here." className="py-8" />
+            <EmptyState
+              title="Nothing here yet"
+              message="New activity will show up here."
+              className="py-8"
+            />
           )}
           {!isPending && !error && items.length > 0 && (
             <ul className="border-border divide-y">
@@ -102,7 +99,10 @@ export function NotificationCenter() {
                 return (
                   <li
                     key={n.id}
-                    className={cn("hover:bg-muted/50 flex gap-3 px-4 py-3", n.unread && "bg-primary/4")}
+                    className={cn(
+                      "hover:bg-muted/50 flex gap-3 px-4 py-3",
+                      n.unread && "bg-primary/4",
+                    )}
                   >
                     <span
                       className={cn(

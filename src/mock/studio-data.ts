@@ -1,15 +1,15 @@
-import type {
+import type { AppNotification, AssetCard, RagStage, SourceRef, Workspace } from "@/types/domain";
+
+export type {
   AppNotification,
   AssetCard,
+  NotificationKind,
+  OutputStatus,
   RagStage,
   SourceRef,
-  Workspace,
 } from "@/types/domain";
-
-export type { AppNotification, AssetCard, NotificationKind, OutputStatus, RagStage, SourceRef } from "@/types/domain";
 // Frontend-only demo data for the redesigned Content Agents experience.
 // No backend / AI calls — everything here is static design fixture data.
-
 
 export const workspaces: Workspace[] = [
   {
@@ -64,13 +64,57 @@ export interface ModelOption {
 }
 
 export const models: ModelOption[] = [
-  { id: "gemini-flash", name: "Gemini 2.5 Flash", vendor: "Google", note: "Fast, cheap, long context", latency: "1.2s", badge: "Default" },
-  { id: "gemini-pro", name: "Gemini 2.5 Pro", vendor: "Google", note: "Best reasoning for hard items", latency: "4.1s" },
-  { id: "claude-sonnet", name: "Claude Sonnet", vendor: "Anthropic", note: "Strongest explanations", latency: "3.4s" },
-  { id: "gpt-mini", name: "GPT mini", vendor: "OpenAI", note: "Balanced generalist", latency: "2.0s" },
-  { id: "kimi-k2", name: "Kimi K2", vendor: "Moonshot", note: "Very long documents", latency: "3.8s" },
-  { id: "openrouter-auto", name: "OpenRouter Auto", vendor: "OpenRouter", note: "Routes to cheapest capable model", latency: "~2.5s" },
-  { id: "local-llama", name: "Local Llama 3", vendor: "Self-hosted", note: "Runs on-prem, no data egress", latency: "6.2s", badge: "Offline" },
+  {
+    id: "gemini-flash",
+    name: "Gemini 2.5 Flash",
+    vendor: "Google",
+    note: "Fast, cheap, long context",
+    latency: "1.2s",
+    badge: "Default",
+  },
+  {
+    id: "gemini-pro",
+    name: "Gemini 2.5 Pro",
+    vendor: "Google",
+    note: "Best reasoning for hard items",
+    latency: "4.1s",
+  },
+  {
+    id: "claude-sonnet",
+    name: "Claude Sonnet",
+    vendor: "Anthropic",
+    note: "Strongest explanations",
+    latency: "3.4s",
+  },
+  {
+    id: "gpt-mini",
+    name: "GPT mini",
+    vendor: "OpenAI",
+    note: "Balanced generalist",
+    latency: "2.0s",
+  },
+  {
+    id: "kimi-k2",
+    name: "Kimi K2",
+    vendor: "Moonshot",
+    note: "Very long documents",
+    latency: "3.8s",
+  },
+  {
+    id: "openrouter-auto",
+    name: "OpenRouter Auto",
+    vendor: "OpenRouter",
+    note: "Routes to cheapest capable model",
+    latency: "~2.5s",
+  },
+  {
+    id: "local-llama",
+    name: "Local Llama 3",
+    vendor: "Self-hosted",
+    note: "Runs on-prem, no data egress",
+    latency: "6.2s",
+    badge: "Offline",
+  },
 ];
 
 export type ControlKind = "segmented" | "slider" | "toggle" | "text" | "date" | "tags";
@@ -107,10 +151,38 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "Generate a question bank covering iteration and comprehensions…",
     icon: "list-checks",
     controls: [
-      { key: "type", label: "Question type", kind: "segmented", options: ["MCQ", "True/False", "Short Answer"], value: "MCQ" },
-      { key: "difficulty", label: "Difficulty", kind: "segmented", options: ["Beginner", "Intermediate", "Advanced"], value: "Intermediate" },
-      { key: "count", label: "Question count", kind: "slider", min: 4, max: 40, step: 2, value: 12 },
-      { key: "bloom", label: "Bloom level", kind: "segmented", options: ["Auto", "Recall", "Apply", "Analyse"], value: "Auto", future: true, hint: "Coming soon" },
+      {
+        key: "type",
+        label: "Question type",
+        kind: "segmented",
+        options: ["MCQ", "True/False", "Short Answer"],
+        value: "MCQ",
+      },
+      {
+        key: "difficulty",
+        label: "Difficulty",
+        kind: "segmented",
+        options: ["Beginner", "Intermediate", "Advanced"],
+        value: "Intermediate",
+      },
+      {
+        key: "count",
+        label: "Question count",
+        kind: "slider",
+        min: 4,
+        max: 40,
+        step: 2,
+        value: 12,
+      },
+      {
+        key: "bloom",
+        label: "Bloom level",
+        kind: "segmented",
+        options: ["Auto", "Recall", "Apply", "Analyse"],
+        value: "Auto",
+        future: true,
+        hint: "Coming soon",
+      },
     ],
   },
   {
@@ -121,8 +193,19 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "I keep mixing up mutable and immutable types — help me…",
     icon: "compass",
     controls: [
-      { key: "goal", label: "Learning goal", kind: "text", value: "Pass the mid-term on data structures" },
-      { key: "level", label: "Student level", kind: "segmented", options: ["Beginner", "Intermediate", "Advanced"], value: "Beginner" },
+      {
+        key: "goal",
+        label: "Learning goal",
+        kind: "text",
+        value: "Pass the mid-term on data structures",
+      },
+      {
+        key: "level",
+        label: "Student level",
+        kind: "segmented",
+        options: ["Beginner", "Intermediate", "Advanced"],
+        value: "Beginner",
+      },
     ],
   },
   {
@@ -133,8 +216,20 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "Build a 30-minute mock exam on functions and scope…",
     icon: "target",
     controls: [
-      { key: "difficulty", label: "Difficulty", kind: "segmented", options: ["Beginner", "Intermediate", "Advanced"], value: "Advanced" },
-      { key: "style", label: "Exam style", kind: "segmented", options: ["Mixed", "MCQ only", "Written"], value: "Mixed" },
+      {
+        key: "difficulty",
+        label: "Difficulty",
+        kind: "segmented",
+        options: ["Beginner", "Intermediate", "Advanced"],
+        value: "Advanced",
+      },
+      {
+        key: "style",
+        label: "Exam style",
+        kind: "segmented",
+        options: ["Mixed", "MCQ only", "Written"],
+        value: "Mixed",
+      },
       { key: "hints", label: "Show hints", kind: "toggle", value: true },
       { key: "timed", label: "Timed mode", kind: "toggle", value: false },
     ],
@@ -148,7 +243,13 @@ export const studioAgents: StudioAgent[] = [
     icon: "layers",
     controls: [
       { key: "count", label: "Card count", kind: "slider", min: 10, max: 100, step: 5, value: 40 },
-      { key: "difficulty", label: "Difficulty", kind: "segmented", options: ["Beginner", "Intermediate", "Advanced"], value: "Beginner" },
+      {
+        key: "difficulty",
+        label: "Difficulty",
+        kind: "segmented",
+        options: ["Beginner", "Intermediate", "Advanced"],
+        value: "Beginner",
+      },
       { key: "cloze", label: "Cloze deletions", kind: "toggle", value: false },
     ],
   },
@@ -160,9 +261,29 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "Explain the iteration protocol as if I've never seen it…",
     icon: "lightbulb",
     controls: [
-      { key: "depth", label: "Explanation depth", kind: "segmented", options: ["Quick", "Standard", "Deep dive"], value: "Standard" },
-      { key: "examples", label: "Worked examples", kind: "slider", min: 0, max: 6, step: 1, value: 2 },
-      { key: "visual", label: "Visual explanation", kind: "toggle", value: true, hint: "Diagrams where the source supports it" },
+      {
+        key: "depth",
+        label: "Explanation depth",
+        kind: "segmented",
+        options: ["Quick", "Standard", "Deep dive"],
+        value: "Standard",
+      },
+      {
+        key: "examples",
+        label: "Worked examples",
+        kind: "slider",
+        min: 0,
+        max: 6,
+        step: 1,
+        value: 2,
+      },
+      {
+        key: "visual",
+        label: "Visual explanation",
+        kind: "toggle",
+        value: true,
+        hint: "Diagrams where the source supports it",
+      },
     ],
   },
   {
@@ -173,9 +294,23 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "Plan my revision for the final in three weeks…",
     icon: "calendar",
     controls: [
-      { key: "hours", label: "Study hours / week", kind: "slider", min: 2, max: 30, step: 1, value: 8 },
+      {
+        key: "hours",
+        label: "Study hours / week",
+        kind: "slider",
+        min: 2,
+        max: 30,
+        step: 1,
+        value: 8,
+      },
       { key: "date", label: "Target exam date", kind: "date", value: "2026-08-24" },
-      { key: "intensity", label: "Pace", kind: "segmented", options: ["Relaxed", "Steady", "Intense"], value: "Steady" },
+      {
+        key: "intensity",
+        label: "Pace",
+        kind: "segmented",
+        options: ["Relaxed", "Steady", "Intense"],
+        value: "Steady",
+      },
     ],
   },
   {
@@ -186,13 +321,22 @@ export const studioAgents: StudioAgent[] = [
     placeholder: "Give me a one-page revision sheet for tomorrow…",
     icon: "sparkle",
     controls: [
-      { key: "weak", label: "Weak topics", kind: "tags", value: ["Classes", "Files", "Decorators"] },
-      { key: "intensity", label: "Revision intensity", kind: "segmented", options: ["Light", "Focused", "Cram"], value: "Focused" },
+      {
+        key: "weak",
+        label: "Weak topics",
+        kind: "tags",
+        value: ["Classes", "Files", "Decorators"],
+      },
+      {
+        key: "intensity",
+        label: "Revision intensity",
+        kind: "segmented",
+        options: ["Light", "Focused", "Cram"],
+        value: "Focused",
+      },
     ],
   },
 ];
-
-
 
 export const assets: AssetCard[] = [
   {
@@ -215,7 +359,8 @@ export const assets: AssetCard[] = [
         doc: "Introduction to Python Programming",
         page: 74,
         chunk: "chunk_0182",
-        snippet: "Default parameter values are evaluated exactly once, when the def statement is executed…",
+        snippet:
+          "Default parameter values are evaluated exactly once, when the def statement is executed…",
         score: 0.94,
       },
       {
@@ -235,8 +380,7 @@ export const assets: AssetCard[] = [
     model: "Claude Sonnet",
     kind: "Explanation",
     title: "The iteration protocol, end to end",
-    body:
-      "A for loop never touches your object directly. It calls iter() on it, which must return an iterator — an object with __next__. Each pass calls __next__ until StopIteration is raised, at which point the loop exits cleanly.",
+    body: "A for loop never touches your object directly. It calls iter() on it, which must return an iterator — an object with __next__. Each pass calls __next__ until StopIteration is raised, at which point the loop exits cleanly.",
     meta: ["Standard depth", "2 examples", "Diagram"],
     rationale:
       "Built from the chapter's protocol section plus the worked generator example on the following page; the analogy is generated, the mechanics are quoted.",
@@ -294,7 +438,8 @@ export const assets: AssetCard[] = [
     meta: ["Short Answer", "Intermediate", "Understanding"],
     answer:
       "A class attribute lives on the class and is shared by all instances; an instance attribute lives in the object's __dict__ and shadows the class attribute once assigned.",
-    rationale: "The chapter contrasts both lookup paths and shows shadowing with a counter example.",
+    rationale:
+      "The chapter contrasts both lookup paths and shows shadowing with a counter example.",
     status: "Needs Editing",
     confidence: 82,
     grounding: 96,
@@ -324,21 +469,26 @@ export const assets: AssetCard[] = [
     model: "Gemini 2.5 Pro",
     kind: "Plan",
     title: "Three-week plan · 8 hours per week · exam 24 Aug",
-    body:
-      "Week 1 — Variables, loops, functions (3 sessions + 20 recall questions).\nWeek 2 — Classes, files, exceptions (3 sessions, weakest area, double practice).\nWeek 3 — Mixed mock exams and revision sheets, tapering to light recall the final two days.",
+    body: "Week 1 — Variables, loops, functions (3 sessions + 20 recall questions).\nWeek 2 — Classes, files, exceptions (3 sessions, weakest area, double practice).\nWeek 3 — Mixed mock exams and revision sheets, tapering to light recall the final two days.",
     meta: ["8 h/week", "Steady", "24 Aug"],
     rationale:
       "Weighted by topic coverage: Classes (38%) and Files (24%) are under-covered, so week 2 allocates the extra sessions.",
     status: "Draft",
     confidence: 88,
     grounding: 91,
-    validation: { schema: true, support: true, duplicates: true, notes: "Grounding below 95% target — plan text is partly generated." },
+    validation: {
+      schema: true,
+      support: true,
+      duplicates: true,
+      notes: "Grounding below 95% target — plan text is partly generated.",
+    },
     sources: [
       {
         doc: "Introduction to Python Programming",
         page: 3,
         chunk: "chunk_0004",
-        snippet: "Course outline: five units across variables, control flow, functions, classes and file I/O.",
+        snippet:
+          "Course outline: five units across variables, control flow, functions, classes and file I/O.",
         score: 0.86,
       },
     ],
@@ -351,10 +501,10 @@ export const assets: AssetCard[] = [
     model: "Claude Sonnet",
     kind: "Mentor note",
     title: "Why your loop keeps skipping the last element",
-    body:
-      "You're using range(len(items) - 1), which stops one short. range's stop value is exclusive, so range(len(items)) already ends at the final index.",
+    body: "You're using range(len(items) - 1), which stops one short. range's stop value is exclusive, so range(len(items)) already ends at the final index.",
     meta: ["Beginner", "Goal: mid-term"],
-    rationale: "Grounded in the range() semantics section; the diagnosis of the learner's error is inferred from their prompt.",
+    rationale:
+      "Grounded in the range() semantics section; the diagnosis of the learner's error is inferred from their prompt.",
     status: "Rejected",
     confidence: 71,
     grounding: 64,
@@ -362,7 +512,8 @@ export const assets: AssetCard[] = [
       schema: true,
       support: false,
       duplicates: true,
-      notes: "Support check failed: the learner's code was not in the indexed content, so part of the answer is ungrounded.",
+      notes:
+        "Support check failed: the learner's code was not in the indexed content, so part of the answer is ungrounded.",
     },
     sources: [
       {
@@ -504,26 +655,138 @@ export interface ChunkRow {
 }
 
 export const retrievedChunks: ChunkRow[] = [
-  { id: "chunk_0121", page: 51, tokens: 486, score: 0.91, retrieved: true, text: "An iterable is any object defining __iter__ which returns an iterator object. The for statement calls iter() on the expression…" },
-  { id: "chunk_0182", page: 74, tokens: 512, score: 0.94, retrieved: true, text: "Default parameter values are evaluated exactly once, when the def statement is executed, not on each call…" },
-  { id: "chunk_0183", page: 75, tokens: 478, score: 0.88, retrieved: true, text: "This is why appending to a default list argument produces surprising results across calls…" },
-  { id: "chunk_0264", page: 102, tokens: 501, score: 0.9, retrieved: true, text: "Attribute lookup first checks the instance dictionary, then the class, then each base class in MRO order…" },
-  { id: "chunk_0301", page: 118, tokens: 462, score: 0.72, retrieved: false, text: "len(obj) is equivalent to obj.__len__() for any sized container…" },
-  { id: "chunk_0341", page: 131, tokens: 495, score: 0.68, retrieved: false, text: "The with statement wraps execution in a context manager that closes the file deterministically…" },
+  {
+    id: "chunk_0121",
+    page: 51,
+    tokens: 486,
+    score: 0.91,
+    retrieved: true,
+    text: "An iterable is any object defining __iter__ which returns an iterator object. The for statement calls iter() on the expression…",
+  },
+  {
+    id: "chunk_0182",
+    page: 74,
+    tokens: 512,
+    score: 0.94,
+    retrieved: true,
+    text: "Default parameter values are evaluated exactly once, when the def statement is executed, not on each call…",
+  },
+  {
+    id: "chunk_0183",
+    page: 75,
+    tokens: 478,
+    score: 0.88,
+    retrieved: true,
+    text: "This is why appending to a default list argument produces surprising results across calls…",
+  },
+  {
+    id: "chunk_0264",
+    page: 102,
+    tokens: 501,
+    score: 0.9,
+    retrieved: true,
+    text: "Attribute lookup first checks the instance dictionary, then the class, then each base class in MRO order…",
+  },
+  {
+    id: "chunk_0301",
+    page: 118,
+    tokens: 462,
+    score: 0.72,
+    retrieved: false,
+    text: "len(obj) is equivalent to obj.__len__() for any sized container…",
+  },
+  {
+    id: "chunk_0341",
+    page: 131,
+    tokens: 495,
+    score: 0.68,
+    retrieved: false,
+    text: "The with statement wraps execution in a context manager that closes the file deterministically…",
+  },
 ];
 
-
-
 export const notifications: AppNotification[] = [
-  { id: "n1", kind: "review", title: "3 outputs need your review", detail: "Question Bank run gen-1042 · Python Course", time: "8m", unread: true, roles: ["reviewer", "admin"] },
-  { id: "n2", kind: "validation", title: "Validation warning", detail: "out-9009 is a near-duplicate of out-8974 (0.91)", time: "1h", unread: true, roles: ["reviewer", "admin"] },
-  { id: "n3", kind: "grounding", title: "Grounding failed", detail: "Mentor note out-9007 fell to 64% support", time: "2h", unread: true, roles: ["reviewer", "admin"] },
-  { id: "n4", kind: "done", title: "Generation finished", detail: "Flashcards · 40 cards · Linear Algebra deck", time: "Yesterday", unread: false, roles: ["student", "reviewer", "admin"] },
-  { id: "n5", kind: "export", title: "Export ready", detail: "python-core-questions.pdf · 24 approved items", time: "Yesterday", unread: false, roles: ["student", "reviewer", "admin"] },
-  { id: "s1", kind: "done", title: "Your question was approved", detail: "out-8974 · reviewed by Noor Patel · Python Course", time: "12m", unread: true, roles: ["student"] },
-  { id: "s2", kind: "grounding", title: "One of your items was rejected", detail: "out-9007 · grounding fell to 64% · regenerate to fix", time: "3h", unread: true, roles: ["student"] },
-  { id: "s3", kind: "review", title: "Your run is with a reviewer", detail: "gen-1042 · 6 items submitted for review", time: "5h", unread: false, roles: ["student"] },
-  { id: "a1", kind: "validation", title: "Reviewer queue is growing", detail: "12 items pending across 3 workspaces", time: "30m", unread: true, roles: ["admin"] },
+  {
+    id: "n1",
+    kind: "review",
+    title: "3 outputs need your review",
+    detail: "Question Bank run gen-1042 · Python Course",
+    time: "8m",
+    unread: true,
+    roles: ["reviewer", "admin"],
+  },
+  {
+    id: "n2",
+    kind: "validation",
+    title: "Validation warning",
+    detail: "out-9009 is a near-duplicate of out-8974 (0.91)",
+    time: "1h",
+    unread: true,
+    roles: ["reviewer", "admin"],
+  },
+  {
+    id: "n3",
+    kind: "grounding",
+    title: "Grounding failed",
+    detail: "Mentor note out-9007 fell to 64% support",
+    time: "2h",
+    unread: true,
+    roles: ["reviewer", "admin"],
+  },
+  {
+    id: "n4",
+    kind: "done",
+    title: "Generation finished",
+    detail: "Flashcards · 40 cards · Linear Algebra deck",
+    time: "Yesterday",
+    unread: false,
+    roles: ["student", "reviewer", "admin"],
+  },
+  {
+    id: "n5",
+    kind: "export",
+    title: "Export ready",
+    detail: "python-core-questions.pdf · 24 approved items",
+    time: "Yesterday",
+    unread: false,
+    roles: ["student", "reviewer", "admin"],
+  },
+  {
+    id: "s1",
+    kind: "done",
+    title: "Your question was approved",
+    detail: "out-8974 · reviewed by Noor Patel · Python Course",
+    time: "12m",
+    unread: true,
+    roles: ["student"],
+  },
+  {
+    id: "s2",
+    kind: "grounding",
+    title: "One of your items was rejected",
+    detail: "out-9007 · grounding fell to 64% · regenerate to fix",
+    time: "3h",
+    unread: true,
+    roles: ["student"],
+  },
+  {
+    id: "s3",
+    kind: "review",
+    title: "Your run is with a reviewer",
+    detail: "gen-1042 · 6 items submitted for review",
+    time: "5h",
+    unread: false,
+    roles: ["student"],
+  },
+  {
+    id: "a1",
+    kind: "validation",
+    title: "Reviewer queue is growing",
+    detail: "12 items pending across 3 workspaces",
+    time: "30m",
+    unread: true,
+    roles: ["admin"],
+  },
 ];
 
 export interface ExportRecord {
@@ -536,10 +799,38 @@ export interface ExportRecord {
 }
 
 export const exportsList: ExportRecord[] = [
-  { id: "e1", name: "python-core-questions", format: "PDF", items: 24, workspace: "Python Course", time: "Yesterday 18:02" },
-  { id: "e2", name: "linear-algebra-deck", format: "CSV", items: 40, workspace: "Python Course", time: "Yesterday 17:50" },
-  { id: "e3", name: "os-scheduling-plan", format: "Markdown", items: 1, workspace: "Operating Systems", time: "2 days ago" },
-  { id: "e4", name: "question-bank-export", format: "JSON", items: 118, workspace: "Python Course", time: "Last week" },
+  {
+    id: "e1",
+    name: "python-core-questions",
+    format: "PDF",
+    items: 24,
+    workspace: "Python Course",
+    time: "Yesterday 18:02",
+  },
+  {
+    id: "e2",
+    name: "linear-algebra-deck",
+    format: "CSV",
+    items: 40,
+    workspace: "Python Course",
+    time: "Yesterday 17:50",
+  },
+  {
+    id: "e3",
+    name: "os-scheduling-plan",
+    format: "Markdown",
+    items: 1,
+    workspace: "Operating Systems",
+    time: "2 days ago",
+  },
+  {
+    id: "e4",
+    name: "question-bank-export",
+    format: "JSON",
+    items: 118,
+    workspace: "Python Course",
+    time: "Last week",
+  },
 ];
 
 export const ragStages: RagStage[] = [
@@ -567,8 +858,24 @@ export const futureFeatures = [
 ];
 
 export const promptTemplates = [
-  { label: "Mid-term question bank", agent: "Question Bank", text: "Generate 20 intermediate MCQs covering the whole chapter, balanced across Bloom levels." },
-  { label: "Explain like I'm new", agent: "Concept Explanation", text: "Explain this topic from first principles with one analogy and two worked examples." },
-  { label: "Two-week cram plan", agent: "Study Plan", text: "Build a two-week plan at 10 hours per week weighted toward my weakest topics." },
-  { label: "Timed mock exam", agent: "Test Help", text: "Create a 45-minute mock exam, mixed format, hints hidden until submission." },
+  {
+    label: "Mid-term question bank",
+    agent: "Question Bank",
+    text: "Generate 20 intermediate MCQs covering the whole chapter, balanced across Bloom levels.",
+  },
+  {
+    label: "Explain like I'm new",
+    agent: "Concept Explanation",
+    text: "Explain this topic from first principles with one analogy and two worked examples.",
+  },
+  {
+    label: "Two-week cram plan",
+    agent: "Study Plan",
+    text: "Build a two-week plan at 10 hours per week weighted toward my weakest topics.",
+  },
+  {
+    label: "Timed mock exam",
+    agent: "Test Help",
+    text: "Create a 45-minute mock exam, mixed format, hints hidden until submission.",
+  },
 ];

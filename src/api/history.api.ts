@@ -11,10 +11,7 @@ export async function getHistory({ workspaceId }: HistoryQuery): Promise<GetHist
   return { history: data.history };
 }
 
-export async function appendHistory(
-  workspaceId: string,
-  row: WsHistoryRow,
-): Promise<WsHistoryRow> {
+export async function appendHistory(workspaceId: string, row: WsHistoryRow): Promise<WsHistoryRow> {
   if (!isMockMode()) return http.post<WsHistoryRow>("/history", { workspaceId, row });
   await delay(40);
   return row;

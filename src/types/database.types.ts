@@ -11,11 +11,7 @@ export type UserRole = "student" | "reviewer" | "admin";
 export type DocumentStatus = "uploaded" | "parsing" | "embedding" | "indexed" | "failed";
 
 export type GenerationKind =
-  | "question_bank"
-  | "flashcards"
-  | "study_plan"
-  | "revision_sheet"
-  | "test_help";
+  "question_bank" | "flashcards" | "study_plan" | "revision_sheet" | "test_help";
 
 export type ReviewStatus = "pending" | "approved" | "rejected" | "needs_edit";
 

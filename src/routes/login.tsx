@@ -15,7 +15,10 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       { title: "Sign in — Sensei" },
-      { name: "description", content: "Sign in to Sensei to access your grounded study workspace." },
+      {
+        name: "description",
+        content: "Sign in to Sensei to access your grounded study workspace.",
+      },
       { property: "og:title", content: "Sign in — Sensei" },
       { property: "og:description", content: "Access your grounded study workspace." },
     ],
@@ -64,7 +67,8 @@ function LoginPage() {
             Grounded learning, one login away.
           </h1>
           <p className="text-muted-foreground mt-4 max-w-md">
-            Pick a role to explore the workspace. Each role sees a different surface, matched to what they need to do.
+            Pick a role to explore the workspace. Each role sees a different surface, matched to
+            what they need to do.
           </p>
           <div className="mt-8 space-y-3">
             {DEMO_ACCOUNTS.map((a) => (
@@ -81,8 +85,12 @@ function LoginPage() {
                   {a.role.slice(0, 2)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold capitalize">{a.role} · {a.name}</p>
-                  <p className="text-muted-foreground text-xs">{a.email} · password: {a.password}</p>
+                  <p className="text-sm font-semibold capitalize">
+                    {a.role} · {a.name}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {a.email} · password: {a.password}
+                  </p>
                 </div>
                 <ShieldCheck className="text-muted-foreground size-4" />
               </button>
@@ -105,7 +113,9 @@ function LoginPage() {
           </Link>
 
           <h2 className="mt-2 text-2xl font-semibold tracking-tight">Sign in</h2>
-          <p className="text-muted-foreground mt-1 text-sm">Use one of the demo accounts on the left, or type them in.</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Use one of the demo accounts on the left, or type them in.
+          </p>
 
           <div className="mt-6 space-y-4">
             <div>
@@ -141,7 +151,9 @@ function LoginPage() {
           </Button>
 
           <div className="mt-6 lg:hidden">
-            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">Demo accounts</p>
+            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-widest uppercase">
+              Demo accounts
+            </p>
             <div className="space-y-2">
               {DEMO_ACCOUNTS.map((a) => (
                 <button
@@ -153,7 +165,8 @@ function LoginPage() {
                   }}
                   className="border-border hover:border-primary/40 w-full rounded-lg border px-3 py-2 text-left text-xs"
                 >
-                  <span className="font-semibold capitalize">{a.role}</span> · {a.email} / {a.password}
+                  <span className="font-semibold capitalize">{a.role}</span> · {a.email} /{" "}
+                  {a.password}
                 </button>
               ))}
             </div>

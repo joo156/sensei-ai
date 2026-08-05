@@ -26,7 +26,13 @@ import { ModelSelector, type ModelId } from "@/components/app/ModelSelector";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useNotify } from "@/contexts/NotificationContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -40,9 +46,16 @@ export const Route = createFileRoute("/studio")({
   head: () => ({
     meta: [
       { title: "AI Studio — Sensei" },
-      { name: "description", content: "Generate grounded question banks, flashcards, study plans, exams and mentor conversations." },
+      {
+        name: "description",
+        content:
+          "Generate grounded question banks, flashcards, study plans, exams and mentor conversations.",
+      },
       { property: "og:title", content: "AI Studio — Sensei" },
-      { property: "og:description", content: "Seven purpose-built agents, one grounded workspace." },
+      {
+        property: "og:description",
+        content: "Seven purpose-built agents, one grounded workspace.",
+      },
     ],
   }),
   component: () => (
@@ -54,7 +67,12 @@ export const Route = createFileRoute("/studio")({
 
 type TabId = "questions" | "flashcards" | "test" | "plan" | "revision" | "mentor" | "concept";
 
-const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; kind: "gen" | "chat" }[] = [
+const TABS: {
+  id: TabId;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  kind: "gen" | "chat";
+}[] = [
   { id: "questions", label: "Question Bank", icon: ClipboardList, kind: "gen" },
   { id: "test", label: "Test Help", icon: GraduationCap, kind: "gen" },
   { id: "flashcards", label: "Flashcards", icon: Layers, kind: "gen" },
@@ -141,12 +159,25 @@ function StudioPage() {
       {tab === "flashcards" && <FlashcardsPanel model={model} doc={doc} />}
       {tab === "plan" && <StudyPlanPanel model={model} doc={doc} />}
       {tab === "revision" && <RevisionPanel model={model} doc={doc} />}
-      {tab === "mentor" && <ChatPanel agent={active} model={model} doc={doc} greeting="I'm your grounded mentor. Ask me anything about the selected document — I'll only speak from what's cited." />}
-      {tab === "concept" && <ChatPanel agent={active} model={model} doc={doc} greeting="Ask me to explain any concept from your material. I'll break it down with citations." />}
+      {tab === "mentor" && (
+        <ChatPanel
+          agent={active}
+          model={model}
+          doc={doc}
+          greeting="I'm your grounded mentor. Ask me anything about the selected document — I'll only speak from what's cited."
+        />
+      )}
+      {tab === "concept" && (
+        <ChatPanel
+          agent={active}
+          model={model}
+          doc={doc}
+          greeting="Ask me to explain any concept from your material. I'll break it down with citations."
+        />
+      )}
     </AppShell>
   );
 }
-
 
 /* ---------------- Workspace helpers ---------------- */
 
@@ -200,16 +231,37 @@ function QuestionBankPanel({ model, doc }: { model: ModelId; doc: string }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Question Bank controls" onGenerate={generate} busy={busy}>
-        <SegmentedField label="Question type" value={type} onChange={setType} options={["MCQ", "True/False", "Short Answer"]} />
-        <SegmentedField label="Difficulty" value={difficulty} onChange={setDifficulty} options={["Beginner", "Intermediate", "Advanced"]} />
-        <SliderField label="Question count" value={count} onChange={setCount} min={3} max={12} step={1} />
+        <SegmentedField
+          label="Question type"
+          value={type}
+          onChange={setType}
+          options={["MCQ", "True/False", "Short Answer"]}
+        />
+        <SegmentedField
+          label="Difficulty"
+          value={difficulty}
+          onChange={setDifficulty}
+          options={["Beginner", "Intermediate", "Advanced"]}
+        />
+        <SliderField
+          label="Question count"
+          value={count}
+          onChange={setCount}
+          min={3}
+          max={12}
+          step={1}
+        />
         <DocLine doc={doc} />
       </ControlsCard>
 
       <div className="min-w-0">
         {busy && <SkeletonList />}
         {!busy && !results && (
-          <EmptyState icon={ClipboardList} title="Ready to generate" body="Set your controls on the left, then click Generate to build an interactive quiz." />
+          <EmptyState
+            icon={ClipboardList}
+            title="Ready to generate"
+            body="Set your controls on the left, then click Generate to build an interactive quiz."
+          />
         )}
         {!busy && results && <InteractiveQuiz questions={results} />}
       </div>
@@ -255,22 +307,44 @@ function TestHelpPanel({ model, doc }: { model: ModelId; doc: string }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Exam simulation controls" onGenerate={generate} busy={busy}>
-        <SliderField label="Duration (min)" value={duration} onChange={setDuration} min={5} max={60} step={5} />
-        <SliderField label="Question count" value={count} onChange={setCount} min={3} max={12} step={1} />
+        <SliderField
+          label="Duration (min)"
+          value={duration}
+          onChange={setDuration}
+          min={5}
+          max={60}
+          step={5}
+        />
+        <SliderField
+          label="Question count"
+          value={count}
+          onChange={setCount}
+          min={3}
+          max={12}
+          step={1}
+        />
         <DocLine doc={doc} />
       </ControlsCard>
 
       <div className="min-w-0">
         {!started && !busy && (
-          <EmptyState icon={GraduationCap} title="Exam simulation" body="Timed, cite-checked exam. Answer everything, then reveal explanations and sources." />
+          <EmptyState
+            icon={GraduationCap}
+            title="Exam simulation"
+            body="Timed, cite-checked exam. Answer everything, then reveal explanations and sources."
+          />
         )}
         {busy && <SkeletonList />}
         {started && set && (
           <>
             <div className="surface-card mb-4 flex items-center gap-3 p-4">
               <Timer className="text-primary size-5" />
-              <p className="text-sm font-semibold">Exam mode · {duration} min · {set.length} questions</p>
-              <span className="text-muted-foreground ml-auto text-xs">Answers reveal after each check</span>
+              <p className="text-sm font-semibold">
+                Exam mode · {duration} min · {set.length} questions
+              </p>
+              <span className="text-muted-foreground ml-auto text-xs">
+                Answers reveal after each check
+              </span>
             </div>
             <InteractiveQuiz questions={set} />
           </>
@@ -317,15 +391,31 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Flashcards controls" onGenerate={generate} busy={busy}>
-        <SegmentedField label="Topic" value={topic} onChange={setTopic} options={["All chapters", "Data types", "Functions", "OOP"]} />
-        <SliderField label="Card count" value={count} onChange={setCount} min={4} max={12} step={1} />
+        <SegmentedField
+          label="Topic"
+          value={topic}
+          onChange={setTopic}
+          options={["All chapters", "Data types", "Functions", "OOP"]}
+        />
+        <SliderField
+          label="Card count"
+          value={count}
+          onChange={setCount}
+          min={4}
+          max={12}
+          step={1}
+        />
         <DocLine doc={doc} />
       </ControlsCard>
 
       <div className="min-w-0">
         {busy && <SkeletonList />}
         {!busy && !deck && (
-          <EmptyState icon={Layers} title="Animated flashcard deck" body="Flip, shuffle, favorite, mark difficult. Study or quiz mode." />
+          <EmptyState
+            icon={Layers}
+            title="Animated flashcard deck"
+            body="Flip, shuffle, favorite, mark difficult. Study or quiz mode."
+          />
         )}
         {!busy && deck && (
           <div className="surface-card p-6">
@@ -374,14 +464,25 @@ function StudyPlanPanel({ model, doc }: { model: ModelId; doc: string }) {
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Study plan controls" onGenerate={generate} busy={busy}>
         <SliderField label="Days" value={days} onChange={setDays} min={3} max={14} step={1} />
-        <SliderField label="Hours per day" value={hoursPerDay} onChange={setHoursPerDay} min={1} max={6} step={1} />
+        <SliderField
+          label="Hours per day"
+          value={hoursPerDay}
+          onChange={setHoursPerDay}
+          min={1}
+          max={6}
+          step={1}
+        />
         <DocLine doc={doc} />
       </ControlsCard>
 
       <div className="min-w-0">
         {busy && <SkeletonList />}
         {!busy && !plan && (
-          <EmptyState icon={Calendar} title="Personalised study plan" body="Timeline, calendar and checklist tailored to your available time." />
+          <EmptyState
+            icon={Calendar}
+            title="Personalised study plan"
+            body="Timeline, calendar and checklist tailored to your available time."
+          />
         )}
         {!busy && plan && (
           <div className="space-y-3">
@@ -421,7 +522,9 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
   const notify = useNotify();
   const log = useGenerationLog();
   const [busy, setBusy] = useState(false);
-  const [items, setItems] = useState<{ topic: string; strength: number; action: string }[] | null>(null);
+  const [items, setItems] = useState<{ topic: string; strength: number; action: string }[] | null>(
+    null,
+  );
 
   const generate = async () => {
     setBusy(true);
@@ -444,9 +547,15 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-      <ControlsCard title="Revision" onGenerate={generate} busy={busy} generateLabel="Analyse weak topics">
+      <ControlsCard
+        title="Revision"
+        onGenerate={generate}
+        busy={busy}
+        generateLabel="Analyse weak topics"
+      >
         <p className="text-muted-foreground text-xs">
-          Based on your recent quiz results and grounded feedback, we highlight what to revisit before your exam.
+          Based on your recent quiz results and grounded feedback, we highlight what to revisit
+          before your exam.
         </p>
         <DocLine doc={doc} />
       </ControlsCard>
@@ -454,7 +563,11 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
       <div className="min-w-0">
         {busy && <SkeletonList />}
         {!busy && !items && (
-          <EmptyState icon={Target} title="Weak topic detection" body="Turn your recent history into a targeted revision checklist." />
+          <EmptyState
+            icon={Target}
+            title="Weak topic detection"
+            body="Turn your recent history into a targeted revision checklist."
+          />
         )}
         {!busy && items && (
           <div className="space-y-3">
@@ -476,12 +589,18 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
                     <div
                       className={cn(
                         "h-full",
-                        it.strength < 50 ? "bg-destructive" : it.strength < 70 ? "bg-warning" : "bg-success",
+                        it.strength < 50
+                          ? "bg-destructive"
+                          : it.strength < 70
+                            ? "bg-warning"
+                            : "bg-success",
                       )}
                       style={{ width: `${it.strength}%` }}
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-right text-[11px]">{it.strength}%</p>
+                  <p className="text-muted-foreground mt-1 text-right text-[11px]">
+                    {it.strength}%
+                  </p>
                 </div>
                 <CheckCircle2 className="text-muted-foreground size-4" />
               </motion.div>
@@ -528,7 +647,12 @@ function ChatPanel({
   const send = async () => {
     if (!input.trim() || busy) return;
     const q = input.trim();
-    const userMsg = { id: `m-${Date.now().toString(36)}`, role: "user" as const, text: q, time: now() };
+    const userMsg = {
+      id: `m-${Date.now().toString(36)}`,
+      role: "user" as const,
+      text: q,
+      time: now(),
+    };
     let id = chatId;
 
     if (!id) {
@@ -539,10 +663,7 @@ function ChatPanel({
         agent: agent.label,
         model,
         date: new Date().toISOString().slice(0, 16).replace("T", " "),
-        messages: [
-          { id: "greeting", role: "assistant", text: greeting, time: now() },
-          userMsg,
-        ],
+        messages: [{ id: "greeting", role: "assistant", text: greeting, time: now() }, userMsg],
       });
       setChatId(id);
     } else {
@@ -579,7 +700,9 @@ function ChatPanel({
         </span>
         <div>
           <p className="text-sm font-semibold">{agent.label}</p>
-          <p className="text-muted-foreground text-[11px]">{workspace.name} · grounded to {docTitle}</p>
+          <p className="text-muted-foreground text-[11px]">
+            {workspace.name} · grounded to {docTitle}
+          </p>
         </div>
       </div>
       <div className="mesh-bg flex-1 space-y-3 overflow-y-auto p-4">
@@ -642,7 +765,9 @@ function ControlsCard({
 }) {
   return (
     <aside className="surface-card sticky top-24 h-max p-5">
-      <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">{title}</p>
+      <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+        {title}
+      </p>
       <div className="mt-4 space-y-5">{children}</div>
       <Button className="mt-6 w-full" onClick={onGenerate} disabled={busy}>
         {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
@@ -674,7 +799,9 @@ function SegmentedField({
             onClick={() => onChange(o)}
             className={cn(
               "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
-              value === o ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40",
+              value === o
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40",
             )}
           >
             {o}
@@ -706,7 +833,14 @@ function SliderField({
         <Label className="text-xs tracking-wide uppercase">{label}</Label>
         <span className="text-primary text-sm font-semibold">{value}</span>
       </div>
-      <Slider className="mt-3" value={[value]} onValueChange={(v) => onChange(v[0])} min={min} max={max} step={step} />
+      <Slider
+        className="mt-3"
+        value={[value]}
+        onValueChange={(v) => onChange(v[0])}
+        min={min}
+        max={max}
+        step={step}
+      />
     </div>
   );
 }
@@ -720,9 +854,7 @@ function DocLine({ doc }: { doc: string }) {
         Grounded to · {active.name}
       </p>
       <p className="mt-0.5 truncate font-medium">{d?.title ?? "No document selected"}</p>
-      {d && (
-        <p className="text-muted-foreground mt-0.5">{d.chunks.length} chunks indexed</p>
-      )}
+      {d && <p className="text-muted-foreground mt-0.5">{d.chunks.length} chunks indexed</p>}
       {d?.notes && (
         <p className="border-primary/30 text-muted-foreground mt-2 line-clamp-3 border-l-2 pl-2 italic">
           Your notes: {d.notes}

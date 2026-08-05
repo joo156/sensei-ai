@@ -56,7 +56,8 @@ Create a private `documents` bucket. `UploadService.upload()` → `supabase.stor
 Subscribe where the mock layer currently polls nothing:
 
 ```ts
-supabase.channel("reviews")
+supabase
+  .channel("reviews")
   .on("postgres_changes", { event: "*", schema: "public", table: "reviews" }, handler)
   .subscribe();
 ```

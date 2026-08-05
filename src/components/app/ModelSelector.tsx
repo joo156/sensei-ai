@@ -1,5 +1,11 @@
 import { Cpu } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { ModelService } from "@/services/ModelService";
 
@@ -8,7 +14,15 @@ export const MODELS = ModelService.list();
 
 export type ModelId = string;
 
-export function ModelSelector({ value, onChange, className }: { value: ModelId; onChange: (v: ModelId) => void; className?: string }) {
+export function ModelSelector({
+  value,
+  onChange,
+  className,
+}: {
+  value: ModelId;
+  onChange: (v: ModelId) => void;
+  className?: string;
+}) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ModelId)}>
       <SelectTrigger className={className ?? "h-9 w-auto min-w-44 gap-2"}>

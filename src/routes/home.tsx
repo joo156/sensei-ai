@@ -23,7 +23,10 @@ export const Route = createFileRoute("/home")({
   head: () => ({
     meta: [
       { title: "Home — Sensei" },
-      { name: "description", content: "Continue studying, jump back into your workspace or generate a new asset." },
+      {
+        name: "description",
+        content: "Continue studying, jump back into your workspace or generate a new asset.",
+      },
       { property: "og:title", content: "Home — Sensei" },
       { property: "og:description", content: "Your grounded study workspace." },
     ],
@@ -36,7 +39,13 @@ export const Route = createFileRoute("/home")({
 });
 
 const QUICK = [
-  { to: "/studio", tab: "questions", label: "Question Bank", icon: ClipboardList, hint: "MCQs, short answer" },
+  {
+    to: "/studio",
+    tab: "questions",
+    label: "Question Bank",
+    icon: ClipboardList,
+    hint: "MCQs, short answer",
+  },
   { to: "/studio", tab: "flashcards", label: "Flashcards", icon: Layers, hint: "Animated deck" },
   { to: "/studio", tab: "mentor", label: "Mentor", icon: MessagesSquare, hint: "Grounded tutor" },
   { to: "/studio", tab: "concept", label: "Concept", icon: Lightbulb, hint: "Explain any idea" },
@@ -63,14 +72,20 @@ function StudentHome() {
       <section className="surface-card overflow-hidden">
         <div className="mesh-bg grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
           <div>
-            <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">Continue studying</span>
+            <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">
+              Continue studying
+            </span>
             <h2 className="mt-2 text-xl font-semibold">Chapter 3 — Data Types & Variables</h2>
             <p className="text-muted-foreground mt-1 text-sm">
               You reviewed 12 of 25 grounded questions. Pick up in the same session or start fresh.
             </p>
             <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-3 text-xs">
-              <span className="inline-flex items-center gap-1"><Clock className="size-3.5" /> 18 min left</span>
-              <span className="inline-flex items-center gap-1"><BookOpen className="size-3.5" /> Introduction to Python</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3.5" /> 18 min left
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <BookOpen className="size-3.5" /> Introduction to Python
+              </span>
             </div>
           </div>
           <Button asChild>
@@ -116,7 +131,9 @@ function StudentHome() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold tracking-tight">Recent documents</h3>
             <Button asChild variant="ghost" size="sm">
-              <Link to="/library">View library <ArrowRight className="size-4" /></Link>
+              <Link to="/library">
+                View library <ArrowRight className="size-4" />
+              </Link>
             </Button>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -141,8 +158,12 @@ function StudentHome() {
           <div className="mt-4 divide-y">
             {data.history.slice(0, 4).map((h) => (
               <div key={h.id} className="py-2.5">
-                <p className="truncate text-sm font-medium">{h.agent} · {h.items} items</p>
-                <p className="text-muted-foreground truncate text-xs">{h.doc} · {h.date}</p>
+                <p className="truncate text-sm font-medium">
+                  {h.agent} · {h.items} items
+                </p>
+                <p className="text-muted-foreground truncate text-xs">
+                  {h.doc} · {h.date}
+                </p>
               </div>
             ))}
           </div>
@@ -151,14 +172,19 @@ function StudentHome() {
 
       {/* Continue Mentor / Favorites */}
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Link to="/workspace" className="surface-card hover:border-primary/40 group p-6 transition-colors">
+        <Link
+          to="/workspace"
+          className="surface-card hover:border-primary/40 group p-6 transition-colors"
+        >
           <div className="flex items-center gap-3">
             <span className="bg-primary/10 text-primary flex size-10 items-center justify-center rounded-xl">
               <MessagesSquare className="size-5" />
             </span>
             <div className="flex-1">
               <p className="font-semibold">Continue your mentor conversation</p>
-              <p className="text-muted-foreground text-xs">Last message: "Explain closures in one paragraph…"</p>
+              <p className="text-muted-foreground text-xs">
+                Last message: "Explain closures in one paragraph…"
+              </p>
             </div>
             <ArrowRight className="text-muted-foreground group-hover:text-primary size-4 transition-colors" />
           </div>
@@ -171,7 +197,10 @@ function StudentHome() {
           </div>
           <div className="mt-3 space-y-2">
             {["Immutable sequence type", "What does `len()` call?", "Duck typing"].map((f) => (
-              <div key={f} className="border-border bg-muted/40 rounded-lg border px-3 py-2 text-sm">
+              <div
+                key={f}
+                className="border-border bg-muted/40 rounded-lg border px-3 py-2 text-sm"
+              >
                 {f}
               </div>
             ))}

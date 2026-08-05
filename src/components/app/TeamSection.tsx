@@ -147,7 +147,7 @@ export function TeamSection({ id = "team" }: { id?: string }) {
             className="surface-card flex flex-col justify-center gap-4 p-6"
           >
             <span className="self-start rounded-xl bg-white px-3 py-2 ring-1 ring-black/5">
-<img
+              <img
                 src={sprintsLogo}
                 alt="Sprints AI logo"
                 className="h-9 w-auto object-contain"

@@ -20,7 +20,11 @@ export const Route = createFileRoute("/pipeline")({
       },
     ],
   }),
-  component: () => (<RoleGate allow={["admin"]}><PipelinePage /></RoleGate>),
+  component: () => (
+    <RoleGate allow={["admin"]}>
+      <PipelinePage />
+    </RoleGate>
+  ),
 });
 
 const telemetry = [

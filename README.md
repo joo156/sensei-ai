@@ -30,16 +30,16 @@ with a strict layering so a FastAPI backend and Supabase can be connected later
 
 ## Stack
 
-| Layer | Technology |
-| --- | --- |
-| Framework | TanStack Start (SSR) + TanStack Router |
-| UI | React 19 + Tailwind CSS v4 + shadcn/ui |
-| Data fetching | TanStack Query |
-| Animations | motion |
-| Charts | recharts |
-| Icons | lucide-react |
-| Build | Vite 8 + Nitro |
-| Language | TypeScript (strict) |
+| Layer         | Technology                             |
+| ------------- | -------------------------------------- |
+| Framework     | TanStack Start (SSR) + TanStack Router |
+| UI            | React 19 + Tailwind CSS v4 + shadcn/ui |
+| Data fetching | TanStack Query                         |
+| Animations    | motion                                 |
+| Charts        | recharts                               |
+| Icons         | lucide-react                           |
+| Build         | Vite 8 + Nitro                         |
+| Language      | TypeScript (strict)                    |
 
 ## Project structure
 
@@ -86,11 +86,11 @@ login, workspace switching, generation, review and analytics.
 
 Demo accounts:
 
-| Role | Email | Password |
-| --- | --- | --- |
-| Student | `student@demo.com` | `student` |
+| Role     | Email               | Password   |
+| -------- | ------------------- | ---------- |
+| Student  | `student@demo.com`  | `student`  |
 | Reviewer | `reviewer@demo.com` | `reviewer` |
-| Admin | `admin@demo.com` | `admin` |
+| Admin    | `admin@demo.com`    | `admin`    |
 
 ## AI providers
 
@@ -107,13 +107,13 @@ the selected model id.
 
 ## Environment variables
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `VITE_API_BASE_URL` | `/api` | FastAPI base URL |
-| `VITE_SUPABASE_URL` | *(empty)* | Supabase project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | *(empty)* | Supabase anon key |
-| `VITE_ENABLE_MOCK` | `true` | Resolve from `src/mock` instead of network |
-| `VITE_DEFAULT_MODEL` | `mock` | Default AI provider id |
+| Variable                        | Default   | Purpose                                    |
+| ------------------------------- | --------- | ------------------------------------------ |
+| `VITE_API_BASE_URL`             | `/api`    | FastAPI base URL                           |
+| `VITE_SUPABASE_URL`             | _(empty)_ | Supabase project URL                       |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | _(empty)_ | Supabase anon key                          |
+| `VITE_ENABLE_MOCK`              | `true`    | Resolve from `src/mock` instead of network |
+| `VITE_DEFAULT_MODEL`            | `mock`    | Default AI provider id                     |
 
 Only publishable keys belong in the browser.
 
@@ -151,4 +151,3 @@ See [ROADMAP.md](ROADMAP.md) for the current and planned work.
 - [Backend Contract](docs/BACKEND_CONTRACT.md)
 - [Supabase Integration](docs/SUPABASE_INTEGRATION.md)
 - [Database Schema](docs/DATABASE_SCHEMA.md)
-

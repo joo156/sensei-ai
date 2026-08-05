@@ -5,7 +5,13 @@ import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "./AsyncState";
 import { cn } from "@/lib/utils";
 
-export function Pipeline({ activeIndex, workspaceId }: { activeIndex?: number; workspaceId?: string }) {
+export function Pipeline({
+  activeIndex,
+  workspaceId,
+}: {
+  activeIndex?: number;
+  workspaceId?: string;
+}) {
   const { data, isPending, error, refetch } = useServiceQuery(["pipeline-steps", workspaceId], () =>
     ContentService.pipelineSteps(workspaceId),
   );

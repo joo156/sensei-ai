@@ -10,11 +10,7 @@ import type {
   ReviewResponse,
 } from "@/types/api/review.contracts";
 
-function audit(
-  req: ReviewRequest,
-  action: WsAuditEntry["action"],
-  actor: string,
-): WsAuditEntry {
+function audit(req: ReviewRequest, action: WsAuditEntry["action"], actor: string): WsAuditEntry {
   return {
     id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     itemId: req.itemId,

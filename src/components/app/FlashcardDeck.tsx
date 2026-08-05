@@ -112,7 +112,9 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
               {current.topic ? ` · ${current.topic}` : ""}
             </span>
             <p className="text-2xl leading-tight font-semibold">{current.front}</p>
-            <span className="text-muted-foreground mt-auto text-xs">Click or press Space to flip</span>
+            <span className="text-muted-foreground mt-auto text-xs">
+              Click or press Space to flip
+            </span>
           </div>
           <div className="surface-card absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
             <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">
@@ -151,7 +153,8 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
         </Button>
       </div>
       <p className="text-muted-foreground mt-3 text-center text-[11px]">
-        {hard.size} marked difficult · {favs.size} favorited · Spaced repetition prioritises difficult cards next session
+        {hard.size} marked difficult · {favs.size} favorited · Spaced repetition prioritises
+        difficult cards next session
       </p>
     </div>
   );

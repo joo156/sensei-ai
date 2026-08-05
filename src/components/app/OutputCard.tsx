@@ -82,11 +82,7 @@ export function OutputCard({
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <ScorePill label="Confidence" value={`${asset.confidence}%`} />
-          <ScorePill
-            label="Grounding"
-            value={`${asset.grounding}%`}
-            good={asset.grounding >= 95}
-          />
+          <ScorePill label="Grounding" value={`${asset.grounding}%`} good={asset.grounding >= 95} />
           <ScorePill
             label="Validation"
             value={
@@ -94,7 +90,9 @@ export function OutputCard({
                 ? "Passed"
                 : "Warning"
             }
-            good={asset.validation.schema && asset.validation.support && asset.validation.duplicates}
+            good={
+              asset.validation.schema && asset.validation.support && asset.validation.duplicates
+            }
           />
           <ScorePill label="Versions" value={`v${asset.versions}`} />
         </div>
@@ -109,10 +107,18 @@ export function OutputCard({
       </div>
 
       <div className="border-border bg-muted/30 flex flex-wrap items-center gap-1 border-t px-3 py-2">
-        <PanelButton active={panel === "rationale"} onClick={() => toggle("rationale")} icon={Quote}>
+        <PanelButton
+          active={panel === "rationale"}
+          onClick={() => toggle("rationale")}
+          icon={Quote}
+        >
           Rationale
         </PanelButton>
-        <PanelButton active={panel === "sources"} onClick={() => toggle("sources")} icon={FileSearch}>
+        <PanelButton
+          active={panel === "sources"}
+          onClick={() => toggle("sources")}
+          icon={FileSearch}
+        >
           Sources
         </PanelButton>
         <PanelButton
@@ -181,10 +187,18 @@ export function OutputCard({
                         “{s.snippet}”
                       </p>
                       <div className="mt-2 flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => toast.info("Jumping to source chunk")}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => toast.info("Jumping to source chunk")}
+                        >
                           Jump to source
                         </Button>
-                        <Button size="sm" variant="ghost" onClick={() => toast.info("Opening original document")}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => toast.info("Opening original document")}
+                        >
                           View original
                         </Button>
                       </div>
@@ -220,9 +234,13 @@ export function OutputCard({
                         </p>
                         {i > 0 && (
                           <p className="border-border text-muted-foreground mt-1.5 rounded-lg border p-2 font-mono text-[11px]">
-                            <span className="text-destructive">- shared between every invocation</span>
+                            <span className="text-destructive">
+                              - shared between every invocation
+                            </span>
                             <br />
-                            <span className="text-success">+ persists across calls and accumulates state</span>
+                            <span className="text-success">
+                              + persists across calls and accumulates state
+                            </span>
                           </p>
                         )}
                       </div>

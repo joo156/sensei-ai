@@ -3,13 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { homeForRole, useAuth, type Role } from "@/contexts/AuthContext";
 
-export function RoleGate({
-  allow,
-  children,
-}: {
-  allow: Role[];
-  children: React.ReactNode;
-}) {
+export function RoleGate({ allow, children }: { allow: Role[]; children: React.ReactNode }) {
   const { user, ready } = useAuth();
   const navigate = useNavigate();
 
