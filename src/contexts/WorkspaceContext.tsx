@@ -22,8 +22,10 @@ import type {
   WsHistoryRow,
 } from "@/types/domain";
 
-const STORAGE_KEY = "cortexa.workspace";
-const STATE_KEY = "cortexa.workspace.state";
+import { STORAGE_KEYS } from "@/constants";
+
+const STORAGE_KEY = STORAGE_KEYS.workspaceActive;
+const STATE_KEY = STORAGE_KEYS.workspaceState;
 
 interface PersistShape {
   activeId: string;
