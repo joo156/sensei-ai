@@ -38,7 +38,8 @@ export const Route = createFileRoute("/review")({
       { property: "og:title", content: "Human Review — Sensei" },
       {
         property: "og:description",
-        content: "A reviewer gate between AI generation and export, with citations and audit history.",
+        content:
+          "A reviewer gate between AI generation and export, with citations and audit history.",
       },
     ],
   }),
@@ -56,11 +57,14 @@ const QUALITY_TARGET = 8.5;
 
 function flagsFor(q: GeneratedQuestion): string[] {
   const f: string[] = [];
-  if (q.grounded < GROUNDING_TARGET) f.push(`Grounding ${q.grounded}% below ${GROUNDING_TARGET}% target`);
-  if (q.quality < QUALITY_TARGET) f.push(`Quality ${q.quality.toFixed(1)}/10 below ${QUALITY_TARGET} target`);
+  if (q.grounded < GROUNDING_TARGET)
+    f.push(`Grounding ${q.grounded}% below ${GROUNDING_TARGET}% target`);
+  if (q.quality < QUALITY_TARGET)
+    f.push(`Quality ${q.quality.toFixed(1)}/10 below ${QUALITY_TARGET} target`);
   if (!q.citations?.length) f.push("No supporting chunk attached");
   if (q.citations?.some((c) => c.score < 0.75)) f.push("Weak retrieval match on a cited chunk");
-  if (q.options && new Set(q.options).size !== q.options.length) f.push("Duplicate distractor detected");
+  if (q.options && new Set(q.options).size !== q.options.length)
+    f.push("Duplicate distractor detected");
   return f;
 }
 
@@ -124,10 +128,12 @@ function Review() {
               <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
               <div>
                 <p className="text-sm font-medium">
-                  {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic validation
+                  {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic
+                  validation
                 </p>
                 <p className="text-muted-foreground mt-0.5 text-sm">
-                  Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below {QUALITY_TARGET}
+                  Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below{" "}
+                  {QUALITY_TARGET}
                   /10, retrieval match is weak, or distractors overlap.
                 </p>
               </div>
@@ -370,7 +376,8 @@ function AuditPanel({ entries }: { entries: WsAuditEntry[] }) {
 
       {entries.length === 0 ? (
         <p className="text-muted-foreground mt-6 text-sm">
-          No decisions recorded yet. Approving, rejecting or flagging an output writes an entry here.
+          No decisions recorded yet. Approving, rejecting or flagging an output writes an entry
+          here.
         </p>
       ) : (
         <ol className="mt-4 max-h-[60vh] space-y-3 overflow-y-auto pr-1">

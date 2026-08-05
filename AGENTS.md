@@ -36,4 +36,3 @@ npx tsc --noEmit   # type-check
 npm run lint       # ESLint + Prettier
 npm run build      # production build (client + server/bundle)
 ```
-

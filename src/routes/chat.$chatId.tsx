@@ -8,7 +8,10 @@ export const Route = createFileRoute("/chat/$chatId")({
   head: () => ({
     meta: [
       { title: "Conversation — Sensei" },
-      { name: "description", content: "A saved study conversation from your workspace, reopened in full." },
+      {
+        name: "description",
+        content: "A saved study conversation from your workspace, reopened in full.",
+      },
       { property: "og:title", content: "Conversation — Sensei" },
       { property: "og:description", content: "Read back a saved mentor or concept conversation." },
     ],
@@ -26,7 +29,9 @@ function ChatPage() {
       <main className="bg-background text-foreground flex min-h-screen items-center justify-center px-6">
         <div className="text-center">
           <h1 className="text-xl font-semibold">Conversation not found</h1>
-          <p className="text-muted-foreground mt-1 text-sm">It may have been removed from this workspace.</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            It may have been removed from this workspace.
+          </p>
         </div>
       </main>
     );
@@ -61,9 +66,7 @@ function ChatPage() {
               <div
                 className={cn(
                   "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "surface-card",
+                  m.role === "user" ? "bg-primary text-primary-foreground" : "surface-card",
                 )}
               >
                 {m.text}

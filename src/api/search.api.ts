@@ -62,8 +62,7 @@ export async function search(query: SearchQuery): Promise<SearchResponse> {
   const index = buildIndex().filter((r) => !query.kinds || query.kinds.includes(r.kind));
   const results = needle
     ? index.filter(
-        (r) =>
-          r.title.toLowerCase().includes(needle) || r.subtitle?.toLowerCase().includes(needle),
+        (r) => r.title.toLowerCase().includes(needle) || r.subtitle?.toLowerCase().includes(needle),
       )
     : index;
   return { results: results.slice(0, query.limit ?? 40), total: results.length };

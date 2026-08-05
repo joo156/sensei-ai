@@ -19,11 +19,7 @@ export const ReviewService = {
   flag: (req: ReviewRequest, actor?: string) => reviewApi.flagGeneration(req, actor),
 
   /** Generic entry point used by the review UI. */
-  async setState(
-    state: ReviewState,
-    req: ReviewRequest,
-    actor?: string,
-  ): Promise<ReviewResponse> {
+  async setState(state: ReviewState, req: ReviewRequest, actor?: string): Promise<ReviewResponse> {
     if (state === "Approved") return ReviewService.approve(req, actor);
     if (state === "Rejected") return ReviewService.reject(req, actor);
     if (state === "Needs Edit") return ReviewService.requestEdits(req, actor);

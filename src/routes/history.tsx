@@ -53,12 +53,18 @@ function HistoryPage() {
       }
     >
       <div className="mb-4 max-w-sm">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter this workspace…" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Filter this workspace…"
+        />
       </div>
 
       <h2 className="mb-3 text-sm font-semibold">Conversations</h2>
       {chats.length === 0 ? (
-        <div className="surface-card p-8 text-center text-sm">No conversations in {active.name} yet.</div>
+        <div className="surface-card p-8 text-center text-sm">
+          No conversations in {active.name} yet.
+        </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {chats.map((c, i) => (

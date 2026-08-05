@@ -21,7 +21,7 @@ strict layering so the backend can be swapped without touching the UI.
   `/analytics`, `/pipeline`, `/agents`, `/history`, `/settings`, `/admin`,
   `/login`, `/chat/:chatId`, `/sitemap.xml`).
 - ✅ Layered architecture: `routes/ → components/ → contexts/ & hooks/ →
-  services/ → api/ → mock/ → types/`.
+services/ → api/ → mock/ → types/`.
 - ✅ Mock mode (`VITE_ENABLE_MOCK=true`) — fully offline, feature-complete.
 - ✅ Role-based access (`student`, `reviewer`, `admin`) via `ROLE_PERMISSIONS`
   and `<RoleGate>`.
@@ -73,4 +73,3 @@ Roughly ordered by dependency:
 4. ⬜ Observability: request ids, model latency, rate-limit (429) alerts,
    grounding-score drops.
 5. ⬜ Backups + RLS verification on the database.
-

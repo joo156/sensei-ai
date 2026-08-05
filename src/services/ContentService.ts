@@ -7,7 +7,9 @@ import type { RagStage } from "@/types/domain";
 
 export const ContentService = {
   async pipelineSteps(workspaceId?: string): Promise<Result<ListPipelineStepsResponse>> {
-    return attempt("ContentService.pipelineSteps", () => catalogueApi.getPipelineSteps(workspaceId));
+    return attempt("ContentService.pipelineSteps", () =>
+      catalogueApi.getPipelineSteps(workspaceId),
+    );
   },
 
   async ragStages(): Promise<Result<RagStage[]>> {

@@ -30,7 +30,10 @@ export interface AuthContextValue {
   user: User | null;
   session: Session | null;
   ready: boolean;
-  signIn: (email: string, password: string) => Promise<{ ok: true; user: User } | { ok: false; error: string }>;
+  signIn: (
+    email: string,
+    password: string,
+  ) => Promise<{ ok: true; user: User } | { ok: false; error: string }>;
   /** Alias matching the provider contract. */
   login: (email: string, password: string) => Promise<User>;
   signOut: () => void;

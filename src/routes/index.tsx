@@ -42,21 +42,61 @@ export const Route = createFileRoute("/")({
 });
 
 const FEATURES = [
-  { icon: ClipboardList, name: "Question Bank", blurb: "MCQ, short answer, true/false — every option grounded." },
-  { icon: MessagesSquare, name: "Mentor", blurb: "Conversational tutor that only speaks from your material." },
-  { icon: GraduationCap, name: "Test Help", blurb: "Timed exam simulations with instant feedback." },
+  {
+    icon: ClipboardList,
+    name: "Question Bank",
+    blurb: "MCQ, short answer, true/false — every option grounded.",
+  },
+  {
+    icon: MessagesSquare,
+    name: "Mentor",
+    blurb: "Conversational tutor that only speaks from your material.",
+  },
+  {
+    icon: GraduationCap,
+    name: "Test Help",
+    blurb: "Timed exam simulations with instant feedback.",
+  },
   { icon: Layers, name: "Flashcards", blurb: "Animated cards, shuffle, spaced repetition." },
-  { icon: Lightbulb, name: "Concept Explanation", blurb: "Ask about any idea — get a cited breakdown." },
-  { icon: BookOpen, name: "Study Plan", blurb: "Timeline, calendar and checklist tailored to your deadline." },
-  { icon: Brain, name: "Revision Assistant", blurb: "Weak-topic detection and revision checklists." },
+  {
+    icon: Lightbulb,
+    name: "Concept Explanation",
+    blurb: "Ask about any idea — get a cited breakdown.",
+  },
+  {
+    icon: BookOpen,
+    name: "Study Plan",
+    blurb: "Timeline, calendar and checklist tailored to your deadline.",
+  },
+  {
+    icon: Brain,
+    name: "Revision Assistant",
+    blurb: "Weak-topic detection and revision checklists.",
+  },
 ];
 
 const STEPS = [
   { icon: Upload, title: "Upload", body: "PDFs, decks, notes — up to 200 MB per file." },
-  { icon: Wand2, title: "AI understands", body: "Parsing, chunking and embedding with hybrid retrieval." },
-  { icon: Sparkles, title: "Generate", body: "Pick an agent, tune controls, generate grounded assets." },
-  { icon: ShieldCheck, title: "Review", body: "Human-in-the-loop approval before anything leaves the workspace." },
-  { icon: FileText, title: "Export", body: "PDF, Markdown, JSON or CSV — cite-ready for classrooms." },
+  {
+    icon: Wand2,
+    title: "AI understands",
+    body: "Parsing, chunking and embedding with hybrid retrieval.",
+  },
+  {
+    icon: Sparkles,
+    title: "Generate",
+    body: "Pick an agent, tune controls, generate grounded assets.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Review",
+    body: "Human-in-the-loop approval before anything leaves the workspace.",
+  },
+  {
+    icon: FileText,
+    title: "Export",
+    body: "PDF, Markdown, JSON or CSV — cite-ready for classrooms.",
+  },
 ];
 
 const FILE_TYPES = [
@@ -76,10 +116,18 @@ function Landing() {
             <span className="text-[15px] font-semibold tracking-tight">Sensei</span>
           </Link>
           <nav className="ml-6 hidden gap-6 text-sm md:flex">
-            <a href="#features" className="text-muted-foreground hover:text-foreground">Features</a>
-            <a href="#how" className="text-muted-foreground hover:text-foreground">How it works</a>
-            <a href="#files" className="text-muted-foreground hover:text-foreground">File types</a>
-            <a href="#team" className="text-muted-foreground hover:text-foreground">Team</a>
+            <a href="#features" className="text-muted-foreground hover:text-foreground">
+              Features
+            </a>
+            <a href="#how" className="text-muted-foreground hover:text-foreground">
+              How it works
+            </a>
+            <a href="#files" className="text-muted-foreground hover:text-foreground">
+              File types
+            </a>
+            <a href="#team" className="text-muted-foreground hover:text-foreground">
+              Team
+            </a>
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
@@ -105,14 +153,16 @@ function Landing() {
             transition={{ duration: 0.5 }}
           >
             <span className="border-border bg-card/70 text-muted-foreground inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs">
-              <ShieldCheck className="text-primary size-3.5" /> Grounded generation · Every claim cites a chunk
+              <ShieldCheck className="text-primary size-3.5" /> Grounded generation · Every claim
+              cites a chunk
             </span>
             <h1 className="mt-5 text-4xl leading-[1.05] font-semibold tracking-tight sm:text-5xl lg:text-6xl">
-              Transform educational content into <span className="text-primary">intelligent learning assets</span>.
+              Transform educational content into{" "}
+              <span className="text-primary">intelligent learning assets</span>.
             </h1>
             <p className="text-muted-foreground mt-5 max-w-xl text-lg">
-              Upload any document. Generate question banks, study plans, flashcards, concept explanations and mentor conversations —
-              all grounded, all cited, all reviewable.
+              Upload any document. Generate question banks, study plans, flashcards, concept
+              explanations and mentor conversations — all grounded, all cited, all reviewable.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg" className="cta-shine group px-7">
@@ -147,19 +197,25 @@ function Landing() {
           >
             <div className="surface-card shadow-elevated p-6">
               <div className="mb-4 flex items-center gap-2 text-xs">
-                <span className="bg-primary/12 text-primary rounded-md px-2 py-1 font-semibold">Question Bank</span>
+                <span className="bg-primary/12 text-primary rounded-md px-2 py-1 font-semibold">
+                  Question Bank
+                </span>
                 <span className="text-muted-foreground">Introduction to Python · Ch.3</span>
                 <span className="text-success ml-auto inline-flex items-center gap-1">
                   <ShieldCheck className="size-3.5" /> 98% grounded
                 </span>
               </div>
-              <p className="text-base font-medium">Which type stores a single Unicode character in Python?</p>
+              <p className="text-base font-medium">
+                Which type stores a single Unicode character in Python?
+              </p>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {["int", "bool", "str", "double"].map((o, i) => (
                   <div
                     key={o}
                     className={`rounded-xl border px-3 py-2 text-sm ${
-                      i === 2 ? "border-success bg-success/10 font-medium" : "border-border bg-muted/40 text-muted-foreground"
+                      i === 2
+                        ? "border-success bg-success/10 font-medium"
+                        : "border-border bg-muted/40 text-muted-foreground"
                     }`}
                   >
                     {o}
@@ -167,7 +223,8 @@ function Landing() {
                 ))}
               </div>
               <p className="text-muted-foreground mt-3 text-xs">
-                <span className="text-success font-semibold">Correct.</span> Python has no dedicated char type — single characters are just length-1 <code>str</code>.
+                <span className="text-success font-semibold">Correct.</span> Python has no dedicated
+                char type — single characters are just length-1 <code>str</code>.
               </p>
             </div>
             <div className="bg-primary/20 absolute -inset-4 -z-10 rounded-[2rem] blur-3xl" />
@@ -178,7 +235,9 @@ function Landing() {
       {/* Features */}
       <section id="features" className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Seven agents, one grounded workspace.</h2>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Seven agents, one grounded workspace.
+          </h2>
           <p className="text-muted-foreground mt-3">
             Each agent is purpose-built. Generators just generate. Tutors just tutor.
           </p>
@@ -227,11 +286,16 @@ function Landing() {
       <section id="files" className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Bring any material.</h2>
-          <p className="text-muted-foreground mt-3">Upload lectures, papers, decks, notes — Sensei parses, chunks and embeds them.</p>
+          <p className="text-muted-foreground mt-3">
+            Upload lectures, papers, decks, notes — Sensei parses, chunks and embeds them.
+          </p>
         </div>
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           {FILE_TYPES.map((f) => (
-            <span key={f.label} className="surface-card flex items-center gap-2 px-4 py-2 text-sm font-medium">
+            <span
+              key={f.label}
+              className="surface-card flex items-center gap-2 px-4 py-2 text-sm font-medium"
+            >
               <f.icon className="text-primary size-4" /> {f.label}
             </span>
           ))}
@@ -241,10 +305,17 @@ function Landing() {
       {/* CTA */}
       <section className="mx-auto max-w-4xl px-4 pb-24 sm:px-6">
         <div className="surface-card mesh-bg p-10 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Ready to study smarter?</h2>
-          <p className="text-muted-foreground mx-auto mt-3 max-w-xl">Sign in with a demo account and generate your first grounded question bank in under a minute.</p>
+          <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            Ready to study smarter?
+          </h2>
+          <p className="text-muted-foreground mx-auto mt-3 max-w-xl">
+            Sign in with a demo account and generate your first grounded question bank in under a
+            minute.
+          </p>
           <Button asChild size="lg" className="mt-6">
-            <Link to="/login">Start learning <ArrowRight className="size-4" /></Link>
+            <Link to="/login">
+              Start learning <ArrowRight className="size-4" />
+            </Link>
           </Button>
         </div>
       </section>
@@ -254,7 +325,9 @@ function Landing() {
       <footer className="border-border border-t">
         <div className="text-muted-foreground mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-6 text-xs sm:px-6">
           <span>© Sensei · Grounded learning assets</span>
-          <span className="ml-auto">Designed and built by a student team during the Sprints AI training programme.</span>
+          <span className="ml-auto">
+            Designed and built by a student team during the Sprints AI training programme.
+          </span>
         </div>
       </footer>
     </div>

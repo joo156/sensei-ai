@@ -14,9 +14,15 @@ export const Route = createFileRoute("/settings")({
   head: () => ({
     meta: [
       { title: "Settings — Sensei" },
-      { name: "description", content: "Preferences, default AI model and account settings for your Sensei workspace." },
+      {
+        name: "description",
+        content: "Preferences, default AI model and account settings for your Sensei workspace.",
+      },
       { property: "og:title", content: "Settings — Sensei" },
-      { property: "og:description", content: "Manage preferences and the AI model powering your workspace." },
+      {
+        property: "og:description",
+        content: "Manage preferences and the AI model powering your workspace.",
+      },
     ],
   }),
   component: () => (
@@ -34,18 +40,28 @@ function SettingsPage() {
   const [confidence, setConfidence] = useState(true);
 
   return (
-    <AppShell title="Settings" description="Preferences apply to every generator in your workspace.">
+    <AppShell
+      title="Settings"
+      description="Preferences apply to every generator in your workspace."
+    >
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="surface-card p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold">Default AI model</h2>
-          <p className="text-muted-foreground mt-1 text-sm">Change the provider that powers every generator and chat.</p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Change the provider that powers every generator and chat.
+          </p>
           <div className="mt-4">
             <ModelSelector value={model} onChange={setModel} />
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {MODELS.map((m) => (
-              <div key={m.id} className={`border-border rounded-xl border p-3 text-sm ${model === m.id ? "border-primary bg-primary/5" : ""}`}>
-                <p className="font-semibold">{m.name} <span className="text-muted-foreground text-xs">· {m.vendor}</span></p>
+              <div
+                key={m.id}
+                className={`border-border rounded-xl border p-3 text-sm ${model === m.id ? "border-primary bg-primary/5" : ""}`}
+              >
+                <p className="font-semibold">
+                  {m.name} <span className="text-muted-foreground text-xs">· {m.vendor}</span>
+                </p>
                 <p className="text-muted-foreground mt-1 text-xs">{m.desc}</p>
               </div>
             ))}
@@ -73,9 +89,24 @@ function SettingsPage() {
         <section className="surface-card p-6 lg:col-span-3">
           <h2 className="text-lg font-semibold">Display</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <ToggleRow label="Citation hover cards" desc="Show source snippet when hovering a citation chip." checked={citeHover} onChange={setCiteHover} />
-            <ToggleRow label="Auto-reveal answers" desc="Skip the check step in the interactive quiz." checked={autoReveal} onChange={setAutoReveal} />
-            <ToggleRow label="Confidence badges" desc="Show confidence % beside every answer." checked={confidence} onChange={setConfidence} />
+            <ToggleRow
+              label="Citation hover cards"
+              desc="Show source snippet when hovering a citation chip."
+              checked={citeHover}
+              onChange={setCiteHover}
+            />
+            <ToggleRow
+              label="Auto-reveal answers"
+              desc="Skip the check step in the interactive quiz."
+              checked={autoReveal}
+              onChange={setAutoReveal}
+            />
+            <ToggleRow
+              label="Confidence badges"
+              desc="Show confidence % beside every answer."
+              checked={confidence}
+              onChange={setConfidence}
+            />
           </div>
           <div className="mt-6 flex justify-end">
             <Button onClick={() => toast.success("Settings saved")}>Save changes</Button>
@@ -86,7 +117,17 @@ function SettingsPage() {
   );
 }
 
-function ToggleRow({ label, desc, checked, onChange }: { label: string; desc: string; checked: boolean; onChange: (v: boolean) => void }) {
+function ToggleRow({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
   return (
     <div className="border-border rounded-xl border p-4">
       <div className="flex items-center justify-between">

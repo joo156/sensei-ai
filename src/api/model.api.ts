@@ -4,10 +4,34 @@ import { env, isMockMode } from "@/config/env";
 import type { GetModelsResponse, ModelInfo } from "@/types/api/analytics.contracts";
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
-  { id: "mock", name: "Mock", vendor: "Local", desc: "Fast, deterministic responses for demos", available: true },
-  { id: "gemini", name: "Gemini 1.5", vendor: "Google", desc: "Balanced quality and latency", available: true },
-  { id: "kimi", name: "Kimi K2", vendor: "Moonshot", desc: "Long-context reasoning", available: true },
-  { id: "nvidia", name: "Nvidia Nemotron", vendor: "OpenRouter", desc: "High-precision science tasks", available: true },
+  {
+    id: "mock",
+    name: "Mock",
+    vendor: "Local",
+    desc: "Fast, deterministic responses for demos",
+    available: true,
+  },
+  {
+    id: "gemini",
+    name: "Gemini 1.5",
+    vendor: "Google",
+    desc: "Balanced quality and latency",
+    available: true,
+  },
+  {
+    id: "kimi",
+    name: "Kimi K2",
+    vendor: "Moonshot",
+    desc: "Long-context reasoning",
+    available: true,
+  },
+  {
+    id: "nvidia",
+    name: "Nvidia Nemotron",
+    vendor: "OpenRouter",
+    desc: "High-precision science tasks",
+    available: true,
+  },
 ];
 
 export async function getModels(): Promise<GetModelsResponse> {

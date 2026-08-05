@@ -32,13 +32,33 @@ Base URL: `VITE_API_BASE_URL`. All routes expect `Authorization: Bearer <supabas
 Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini", "options": {} }`
 
 `POST /generate/questions` (+`count`, `difficulty`, `types`) →
+
 ```json
-{ "generationId": "gen-1", "kind": "question_bank", "grounding_score": 100, "quality_score": 9.2,
-  "questions": [ { "id": "q-1", "prompt": "...", "type": "MCQ", "difficulty": "Intermediate",
-    "options": ["a","b"], "answer": "a", "rationale": "...", "bloom": "Understanding",
-    "quality": 9.2, "grounded": 100, "estMinutes": 2, "review": "Pending",
-    "citations": [ { "doc": "doc-1", "page": 12, "chunk": "c-9", "snippet": "...", "score": 0.92 } ] } ] }
+{
+  "generationId": "gen-1",
+  "kind": "question_bank",
+  "grounding_score": 100,
+  "quality_score": 9.2,
+  "questions": [
+    {
+      "id": "q-1",
+      "prompt": "...",
+      "type": "MCQ",
+      "difficulty": "Intermediate",
+      "options": ["a", "b"],
+      "answer": "a",
+      "rationale": "...",
+      "bloom": "Understanding",
+      "quality": 9.2,
+      "grounded": 100,
+      "estMinutes": 2,
+      "review": "Pending",
+      "citations": [{ "doc": "doc-1", "page": 12, "chunk": "c-9", "snippet": "...", "score": 0.92 }]
+    }
+  ]
+}
 ```
+
 `POST /generate/test-help` → same shape (`options.durationMinutes`).
 `POST /generate/flashcards` → `{ "generationId": "...", "kind": "flashcards", "flashcards": [ { "front": "...", "back": "..." } ] }`
 `POST /generate/study-plan` (+`days`, `hoursPerDay`) → `{ "generationId": "...", "kind": "study_plan", "summary": "...", "sections": [], "days": [ { "day": 1, "topics": ["..."], "hours": 2 } ] }`
@@ -48,10 +68,14 @@ Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini
 
 `POST /chats` `{ "workspaceId", "kind": "mentor|concept", "title", "model" }` → `{ "chatId": "chat-1" }`
 `POST /mentor/chat` and `POST /concept/chat` `{ "workspaceId", "chatId", "message", "model", "documentIds": [] }` →
+
 ```json
-{ "message": { "id": "m-1", "role": "assistant", "text": "...", "time": "14:03" },
-  "citations": [ { "docId": "doc-1", "docTitle": "...", "page": 12, "snippet": "..." } ] }
+{
+  "message": { "id": "m-1", "role": "assistant", "text": "...", "time": "14:03" },
+  "citations": [{ "docId": "doc-1", "docTitle": "...", "page": 12, "snippet": "..." }]
+}
 ```
+
 `GET /chats?workspace_id=` → `{ "chats": [ { "id", "title", "agent", "model", "date", "messages": [] } ] }`
 
 ## Review
@@ -59,11 +83,23 @@ Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini
 `GET /review?workspace_id=` → `{ "itemIds": ["q-1"] }`
 `POST /review/approve` | `/review/reject` | `/review/needs-edit` | `/review/flag` | `/review/comment`
 body `{ "workspaceId", "itemId", "comment?", "label?" }` →
+
 ```json
-{ "itemId": "q-1", "status": "Approved",
-  "audit": { "id": "aud-1", "itemId": "q-1", "itemLabel": "...", "action": "Approved",
-             "actor": "Noor Patel", "at": "2026-08-02 14:03", "comment": "..." } }
+{
+  "itemId": "q-1",
+  "status": "Approved",
+  "audit": {
+    "id": "aud-1",
+    "itemId": "q-1",
+    "itemLabel": "...",
+    "action": "Approved",
+    "actor": "Noor Patel",
+    "at": "2026-08-02 14:03",
+    "comment": "..."
+  }
+}
 ```
+
 `GET /review/audit?workspace_id=` → `{ "audit": [ ... ] }`
 
 ## History & analytics

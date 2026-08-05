@@ -127,7 +127,7 @@ function WorkspaceStore({
       /* ignore */
     }
     hydrated.current = true;
-  }, []);
+  }, [seedWorkspaces]);
 
   // Persist everything so notes, chats and review history survive a reload.
   useEffect(() => {

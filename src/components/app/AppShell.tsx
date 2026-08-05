@@ -56,13 +56,35 @@ type NavItem = {
 const NAV_WORK: NavItem[] = [
   { to: "/home", label: "Home", icon: Home, roles: ["student", "reviewer"] },
   { to: "/admin", label: "Admin", icon: BarChart3, roles: ["admin"], badge: "Admin" },
-  { to: "/studio", label: "AI Studio", icon: Sparkles, roles: ["student", "reviewer", "admin"], badge: "Generate" },
-  { to: "/workspace", label: "Workspace", icon: SquareTerminal, roles: ["student", "reviewer", "admin"] },
+  {
+    to: "/studio",
+    label: "AI Studio",
+    icon: Sparkles,
+    roles: ["student", "reviewer", "admin"],
+    badge: "Generate",
+  },
+  {
+    to: "/workspace",
+    label: "Workspace",
+    icon: SquareTerminal,
+    roles: ["student", "reviewer", "admin"],
+  },
 ];
 
 const NAV_CONTENT: NavItem[] = [
-  { to: "/library", label: "Content Library", icon: FileStack, roles: ["student", "reviewer", "admin"] },
-  { to: "/review", label: "Review Queue", icon: ShieldCheck, roles: ["reviewer", "admin"], count: 3 },
+  {
+    to: "/library",
+    label: "Content Library",
+    icon: FileStack,
+    roles: ["student", "reviewer", "admin"],
+  },
+  {
+    to: "/review",
+    label: "Review Queue",
+    icon: ShieldCheck,
+    roles: ["reviewer", "admin"],
+    count: 3,
+  },
   { to: "/history", label: "History", icon: History, roles: ["student", "reviewer", "admin"] },
 ];
 
@@ -72,13 +94,25 @@ const NAV_INSIGHT: NavItem[] = [
   { to: "/agents", label: "Agents", icon: Sparkles, roles: ["admin"] },
 ];
 
-function NavSection({ title, items, role, onNavigate }: { title: string; items: NavItem[]; role: Role; onNavigate?: () => void }) {
+function NavSection({
+  title,
+  items,
+  role,
+  onNavigate,
+}: {
+  title: string;
+  items: NavItem[];
+  role: Role;
+  onNavigate?: () => void;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const visible = items.filter((i) => i.roles.includes(role));
   if (!visible.length) return null;
   return (
     <div className="mb-5">
-      <p className="text-muted-foreground mb-1.5 px-3 text-[11px] font-semibold tracking-widest uppercase">{title}</p>
+      <p className="text-muted-foreground mb-1.5 px-3 text-[11px] font-semibold tracking-widest uppercase">
+        {title}
+      </p>
       <nav className="flex flex-col gap-0.5">
         {visible.map((item) => {
           const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -172,7 +206,9 @@ function WorkspaceSwitcher() {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{w.name}</span>
-                <span className="text-muted-foreground block truncate text-[11px]">{w.subject}</span>
+                <span className="text-muted-foreground block truncate text-[11px]">
+                  {w.subject}
+                </span>
               </span>
               {w.id === active.id && <Check className="text-primary size-4 shrink-0" />}
             </button>
@@ -277,10 +313,15 @@ function UserMenu() {
         <div className="px-2.5 py-2">
           <p className="text-sm font-semibold">{user.name}</p>
           <p className="text-muted-foreground truncate text-[11px]">{user.email}</p>
-          <p className="text-primary mt-1 text-[10px] font-semibold tracking-widest uppercase">{user.role}</p>
+          <p className="text-primary mt-1 text-[10px] font-semibold tracking-widest uppercase">
+            {user.role}
+          </p>
         </div>
         <div className="border-border my-1 border-t" />
-        <Link to="/settings" className="hover:bg-muted flex items-center gap-2 rounded-md px-2.5 py-2 text-sm">
+        <Link
+          to="/settings"
+          className="hover:bg-muted flex items-center gap-2 rounded-md px-2.5 py-2 text-sm"
+        >
           <Settings className="size-4" /> Settings
         </Link>
         <button
@@ -323,7 +364,7 @@ export function AppShell({
         <SidebarBody role={role} />
         <div className="surface-card mt-4 p-4">
           <span className="inline-block rounded-lg bg-white px-2 py-1.5 ring-1 ring-black/5">
-<img
+            <img
               src={sprintsLogo}
               alt="Sprints AI"
               className="h-6 w-auto object-contain"
@@ -397,7 +438,11 @@ export function AppShell({
                 <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{title}</h1>
-                    {description && <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm">{description}</p>}
+                    {description && (
+                      <p className="text-muted-foreground mt-1.5 max-w-2xl text-sm">
+                        {description}
+                      </p>
+                    )}
                   </div>
                   {actions && <div className="flex items-center gap-2">{actions}</div>}
                 </div>

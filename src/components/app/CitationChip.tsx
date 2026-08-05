@@ -1,9 +1,5 @@
 import { Quote } from "lucide-react";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import type { SourceRef } from "@/types/domain";
 import { toast } from "sonner";
@@ -27,7 +23,11 @@ export function CitationChip({ source, index }: { source: SourceRef; index?: num
           {source.snippet}
         </p>
         <div className="mt-3 flex gap-1.5">
-          <Button size="sm" variant="outline" onClick={() => toast.info("Highlighted source chunk")}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => toast.info("Highlighted source chunk")}
+          >
             Highlight chunk
           </Button>
           <Button size="sm" variant="ghost" onClick={() => toast.info("Opening original document")}>

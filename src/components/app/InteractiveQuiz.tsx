@@ -27,7 +27,9 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
   const correct = picked === q.answer;
 
   const copy = () => {
-    void navigator.clipboard.writeText(`Q${index + 1}. ${q.prompt}\nAnswer: ${q.answer}\n${q.rationale}`);
+    void navigator.clipboard.writeText(
+      `Q${index + 1}. ${q.prompt}\nAnswer: ${q.answer}\n${q.rationale}`,
+    );
     toast.success("Question copied");
   };
 
@@ -55,7 +57,13 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
           const isPicked = picked === opt;
           const isCorrect = opt === q.answer;
           const state =
-            checked && isCorrect ? "correct" : checked && isPicked && !isCorrect ? "wrong" : isPicked ? "picked" : "idle";
+            checked && isCorrect
+              ? "correct"
+              : checked && isPicked && !isCorrect
+                ? "wrong"
+                : isPicked
+                  ? "picked"
+                  : "idle";
           return (
             <li key={opt}>
               <button
@@ -73,12 +81,19 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
                   className={cn(
                     "flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
                     state === "correct" && "border-success bg-success text-success-foreground",
-                    state === "wrong" && "border-destructive bg-destructive text-destructive-foreground",
+                    state === "wrong" &&
+                      "border-destructive bg-destructive text-destructive-foreground",
                     state === "picked" && "border-primary bg-primary text-primary-foreground",
                     state === "idle" && "border-border",
                   )}
                 >
-                  {state === "correct" ? <Check className="size-3" /> : state === "wrong" ? <X className="size-3" /> : ""}
+                  {state === "correct" ? (
+                    <Check className="size-3" />
+                  ) : state === "wrong" ? (
+                    <X className="size-3" />
+                  ) : (
+                    ""
+                  )}
                 </span>
                 <span className="flex-1">{opt}</span>
               </button>
@@ -141,11 +156,15 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
             className="border-border mt-4 space-y-3 overflow-hidden border-t pt-4"
           >
             <div>
-              <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">Explanation</p>
+              <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+                Explanation
+              </p>
               <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{q.rationale}</p>
             </div>
             <div>
-              <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">Sources</p>
+              <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+                Sources
+              </p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {q.citations.map((c, i) => (
                   <CitationChip key={c.chunk} source={c} index={i} />

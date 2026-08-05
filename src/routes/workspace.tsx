@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Check, ChevronRight, Copy, FileText, Pencil, Save, Search, Sparkles, Tag } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Copy,
+  FileText,
+  Pencil,
+  Save,
+  Search,
+  Sparkles,
+  Tag,
+} from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,7 +90,10 @@ function WorkspacePage() {
         {doc && (
           <>
             <ChevronRight className="size-3.5" />
-            <button className="hover:text-foreground transition-colors" onClick={() => setChunkId(null)}>
+            <button
+              className="hover:text-foreground transition-colors"
+              onClick={() => setChunkId(null)}
+            >
               {doc.title}
             </button>
           </>
@@ -188,7 +202,6 @@ function WorkspacePage() {
             </div>
 
             <LectureNotesEditor doc={doc} />
-
 
             <h3 className="mt-6 mb-3 text-sm font-semibold">Sections in this lecture</h3>
             {doc.chunks.length === 0 ? (

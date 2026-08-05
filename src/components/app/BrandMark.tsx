@@ -8,7 +8,7 @@ export function BrandMark({ className }: { className?: string }) {
       alt="Sensei logo"
       className={cn(
         "size-9 shrink-0 object-contain transition-all dark:brightness-0 dark:invert",
-        className
+        className,
       )}
     />
   );

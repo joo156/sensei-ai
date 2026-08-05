@@ -1,7 +1,8 @@
 /** Shared request/response envelope types for the FastAPI backend. */
 
 /** JSON-serializable value — used instead of `unknown` for error details. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 export interface ApiError {
   code: string;

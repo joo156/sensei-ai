@@ -12,12 +12,7 @@ export type Difficulty = "Beginner" | "Intermediate" | "Advanced";
 export type QuestionType = "MCQ" | "True/False" | "Short Answer";
 export type ReviewState = "Pending" | "Approved" | "Needs Edit" | "Rejected";
 export type BloomLevel =
-  | "Knowledge"
-  | "Understanding"
-  | "Application"
-  | "Analysis"
-  | "Evaluation"
-  | "Creation";
+  "Knowledge" | "Understanding" | "Application" | "Analysis" | "Evaluation" | "Creation";
 
 export interface Citation {
   doc: string;
@@ -72,13 +67,7 @@ export interface HistoryItem {
 /* ── Agents & pipeline ────────────────────────────────────────────────── */
 
 export type AgentIcon =
-  | "compass"
-  | "lightbulb"
-  | "list-checks"
-  | "target"
-  | "layers"
-  | "calendar"
-  | "sparkle";
+  "compass" | "lightbulb" | "list-checks" | "target" | "layers" | "calendar" | "sparkle";
 
 export interface Agent {
   slug: string;
