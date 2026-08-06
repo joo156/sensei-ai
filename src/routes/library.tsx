@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -22,9 +22,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NeutralBadge } from "@/components/app/badges";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { UploadService } from "@/services";
 import type { WsDoc } from "@/types/domain";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
+const ACCEPTED = ".pdf,.docx,.pptx,.txt,.md";
 
 export const Route = createFileRoute("/library")({
   head: () => ({
@@ -76,6 +79,8 @@ function Library() {
   const [query, setQuery] = useState("");
   const [dragging, setDragging] = useState(false);
   const [draft, setDraft] = useState<DraftState | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Workspace name used by handlers that outlive the active-workspace guard.
   const activeName = active ? active.name : "";
@@ -90,7 +95,24 @@ function Library() {
     [data.docs, query],
   );
 
-  function saveDraft() {
+  async function handleFiles(files: FileList | File[]) {
+    if (!active || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const result = await UploadService.ingest(active.id, file);
+        await addDoc(result.document);
+        toast.success(`Uploaded “${file.name}” to ${activeName}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function saveDraft() {
     if (!draft || !draft.title.trim()) {
       toast.error("Give the material a title first.");
       return;
@@ -102,8 +124,11 @@ function Library() {
     if (draft.id) {
       updateDoc(draft.id, { title: draft.title, tags, notes: draft.notes });
       toast.success("Material updated");
-    } else {
-      addDoc({
+      setDraft(null);
+      return;
+    }
+    try {
+      await addDoc({
         id: newId(),
         title: draft.title,
         kind: draft.kind,
@@ -127,8 +152,10 @@ function Library() {
           : [],
       });
       toast.success(`Added to ${activeName}`);
+      setDraft(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the material.");
     }
-    setDraft(null);
   }
 
   return (
@@ -154,18 +181,7 @@ function Library() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              addDoc({
-                id: newId(),
-                title: e.dataTransfer.files?.[0]?.name ?? "Untitled upload",
-                kind: "PDF",
-                size: "—",
-                pages: 1,
-                uploaded: new Date().toISOString().slice(0, 10),
-                status: "Processing",
-                tags: ["New upload"],
-                chunks: [],
-              });
-              toast.success(`Uploaded to ${activeName}`);
+              if (e.dataTransfer.files?.length) void handleFiles(e.dataTransfer.files);
             }}
             className={cn(
               "surface-card flex flex-col items-center justify-center px-6 py-12 text-center transition-all",
@@ -184,23 +200,18 @@ function Library() {
               PDF, DOCX, PPTX and TXT up to 100 MB — or write your own lecture notes as material.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Button
-                onClick={() => {
-                  addDoc({
-                    id: newId(),
-                    title: `Lecture ${data.docs.length + 1} — Untitled upload`,
-                    kind: "PDF",
-                    size: "2.0 MB",
-                    pages: 24,
-                    uploaded: new Date().toISOString().slice(0, 10),
-                    status: "Processing",
-                    tags: ["New upload"],
-                    chunks: [],
-                  });
-                  toast.success(`Uploaded to ${activeName}`);
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={ACCEPTED}
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) void handleFiles(e.target.files);
                 }}
-              >
-                Select files
+              />
+              <Button disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                <Upload className="size-4" /> {uploading ? "Uploading…" : "Select files"}
               </Button>
               <Button variant="outline" onClick={() => setDraft({ ...emptyDraft })}>
                 <NotebookPen className="size-4" /> Write lecture notes

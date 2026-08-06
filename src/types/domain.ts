@@ -108,6 +108,10 @@ export interface WsDoc {
   tags: string[];
   notes?: string;
   chunks: WsChunk[];
+  /** Backend storage path for file-backed documents (uploaded files). */
+  storagePath?: string;
+  /** Raw byte size, carried through so the record can be persisted accurately. */
+  sizeBytes?: number;
 }
 
 export interface WsChatMessage {

@@ -2,6 +2,7 @@
 import { delay } from "./http";
 import { supabase } from "@/lib/supabase";
 import { isMockMode } from "@/config/env";
+import { getDocumentsForWorkspaces } from "./document.api";
 import { workspaces as seedWorkspaces } from "@/mock/studio-data";
 import { mockAccounts } from "@/mock/users";
 import { emptyWorkspaceData, workspaceData as seedWorkspaceData } from "@/mock/workspace-data";
@@ -197,7 +198,10 @@ export async function getWorkspaceBootstrap(): Promise<BootstrapWorkspacesRespon
     return { workspaces, store };
   }
   const { workspaces } = await getWorkspaces();
+  const docsByWorkspace = await getDocumentsForWorkspaces(workspaces.map((w) => w.id));
   const store: Record<string, WorkspaceData> = {};
-  for (const w of workspaces) store[w.id] = seedWorkspaceData[w.id] ?? emptyWorkspaceData();
+  for (const w of workspaces) {
+    store[w.id] = { ...emptyWorkspaceData(), docs: docsByWorkspace[w.id] ?? [] };
+  }
   return { workspaces, store };
 }

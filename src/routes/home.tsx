@@ -16,9 +16,11 @@ import { AppShell } from "@/components/app/AppShell";
 import { RoleGate } from "@/components/app/RoleGate";
 import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { TeamSection } from "@/components/app/TeamSection";
+import type { WsDoc } from "@/types/domain";
 
 export const Route = createFileRoute("/home")({
   head: () => ({
@@ -52,10 +54,41 @@ const QUICK = [
   { to: "/studio", tab: "concept", label: "Concept", icon: Lightbulb, hint: "Explain any idea" },
 ];
 
+function kindLabel(kind: WsDoc["kind"]): string {
+  switch (kind) {
+    case "PDF":
+      return "PDF Document";
+    case "DOCX":
+      return "Word Document";
+    case "PPTX":
+      return "Slides Document";
+    case "Note":
+    case "TXT":
+      return "Text Document";
+  }
+}
+
+function createdLabel(uploaded: string): string {
+  const day = new Date(uploaded);
+  if (Number.isNaN(day.getTime())) return "Created recently";
+  const today = new Date();
+  const sameDay =
+    day.getFullYear() === today.getFullYear() &&
+    day.getMonth() === today.getMonth() &&
+    day.getDate() === today.getDate();
+  if (sameDay) return "Created today";
+  return `Created ${day.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+}
+
 function StudentHome() {
   const { user } = useAuth();
   const { active, data } = useWorkspace();
   const name = user?.name.split(" ")[0] ?? "there";
+  const latest = [...data.docs].sort((a, b) => b.uploaded.localeCompare(a.uploaded))[0];
 
   return (
     <AppShell
@@ -84,23 +117,47 @@ function StudentHome() {
                 <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">
                   Continue studying
                 </span>
-                <h2 className="mt-2 text-xl font-semibold">Chapter 3 — Data Types & Variables</h2>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  You reviewed 12 of 25 grounded questions. Pick up in the same session or start
-                  fresh.
-                </p>
-                <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-3 text-xs">
-                  <span className="inline-flex items-center gap-1">
-                    <Clock className="size-3.5" /> 18 min left
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <BookOpen className="size-3.5" /> Introduction to Python
-                  </span>
-                </div>
+                {latest ? (
+                  <>
+                    <h2 className="mt-2 text-xl font-semibold">{latest.title}</h2>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {latest.tags.length > 0 ? latest.tags.join(" · ") : kindLabel(latest.kind)}
+                    </p>
+                    <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      <span className="inline-flex items-center gap-1">
+                        <BookOpen className="size-3.5" /> {kindLabel(latest.kind)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="size-3.5" /> {createdLabel(latest.uploaded)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Layers className="size-3.5" /> {latest.pages} page
+                        {latest.pages === 1 ? "" : "s"}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2 py-0.5 font-medium",
+                          latest.status === "Ready"
+                            ? "bg-emerald-500/10 text-emerald-600"
+                            : "bg-amber-500/10 text-amber-600",
+                        )}
+                      >
+                        {latest.status}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="mt-2 text-xl font-semibold">No study material yet.</h2>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      Upload or create your first document.
+                    </p>
+                  </>
+                )}
               </div>
               <Button asChild>
-                <Link to="/workspace">
-                  <PlayCircle className="size-4" /> Resume session
+                <Link to="/library">
+                  <PlayCircle className="size-4" /> {latest ? "View material" : "Browse library"}
                 </Link>
               </Button>
             </div>

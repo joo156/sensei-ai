@@ -10,8 +10,11 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { emptyWorkspaceData } from "@/lib/workspace";
+import { supabase } from "@/lib/supabase";
+import { isMockMode } from "@/config/env";
+import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
-import { WorkspaceService } from "@/services";
+import { DocumentService, WorkspaceService } from "@/services";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
 import type {
@@ -45,7 +48,8 @@ interface WorkspaceCtx {
   refreshWorkspaces: () => void;
   /** Data scoped to the active workspace — switching swaps everything. */
   data: WorkspaceData;
-  addDoc: (doc: WsDoc) => void;
+  /** Persist a new document (text note or staged upload) and add it to the store. */
+  addDoc: (doc: WsDoc) => Promise<void>;
   updateDoc: (id: string, patch: Partial<WsDoc>) => void;
   removeDoc: (id: string) => void;
   /** Review + audit */
@@ -73,11 +77,28 @@ function nowStamp() {
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { data, isPending, error, refetch } = useServiceQuery(
     ["workspace-bootstrap", user?.id ?? null],
     () => WorkspaceService.bootstrap(),
     { refetchOnWindowFocus: true },
   );
+
+  // Realtime: when a workspace row the current user can see changes, refresh
+  // ONLY the workspace-bootstrap cache (never the whole query cache). RLS on
+  // the subscribed table filters delivered events to this user's workspaces.
+  useEffect(() => {
+    if (isMockMode() || !user) return;
+    const channel = supabase
+      .channel(`workspace-updates-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
 
   if (isPending) {
     return (
@@ -208,9 +229,14 @@ function WorkspaceStore({
         return workspace;
       },
       data,
-      addDoc: (doc) => {
+      addDoc: async (doc) => {
         if (!active) return;
-        mutate(active.id, (d) => ({ ...d, docs: [doc, ...d.docs] }));
+        const persisted = await DocumentService.createDocument(active.id, doc);
+        mutate(active.id, (d) => ({
+          ...d,
+          docs: [persisted, ...d.docs.filter((x) => x.id !== persisted.id)],
+        }));
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
       },
       updateDoc: (id, patch) => {
         if (!active) return;
@@ -218,10 +244,16 @@ function WorkspaceStore({
           ...d,
           docs: d.docs.map((x) => (x.id === id ? { ...x, ...patch } : x)),
         }));
+        void DocumentService.updateDocument(active.id, id, patch).catch((err) =>
+          logger.warn("Failed to persist document update", err),
+        );
       },
       removeDoc: (id) => {
         if (!active) return;
         mutate(active.id, (d) => ({ ...d, docs: d.docs.filter((x) => x.id !== id) }));
+        void DocumentService.deleteDocument(id).catch((err) =>
+          logger.warn("Failed to persist document deletion", err),
+        );
       },
       setReview: (itemId, state, opts) => {
         if (!active) return;

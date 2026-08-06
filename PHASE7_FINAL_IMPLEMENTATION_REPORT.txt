@@ -1,0 +1,275 @@
+PHASE 7 — FINAL IMPLEMENTATION REPORT (7.1–7.6)
+===============================================
+
+Date: 2026-08-06
+Status: Implemented, type-checked, linted, built. Migrations 011–014 ready to
+        apply to the live Supabase project (ACTION REQUIRED below).
+
+1. EXECUTIVE SUMMARY
+--------------------
+Phase 7 closed the Supabase data/security/ops loop for Sensei AI:
+
+  * 7.1  Workspace ownership: `workspace_with_owner` view + owner metadata.
+  * 7.2  Workspace visibility (server-enforced) + fix of the stale/deleted
+        workspace bug + query-cache sync + refresh control.
+  * 7.3  Document / generation / review RLS + secure storage (private bucket,
+        ownership-aware policies, signed-URL helper).
+  * 7.4  Realtime (Postgres Changes) + lightweight backend notification model
+        (SECURITY DEFINER triggers → `notifications`).
+  * 7.5  Performance: composite feed/queue/workload indexes.
+  * 7.6  Hardening: TEMP-DEBUG logging removed, TODO audit, secrets audit,
+        full verification, final report.
+
+Everything shipped is backward-compatible and incremental: mock mode still
+works, no service_role key exists in the frontend, only the single anon-key
+client in `src/lib/supabase.ts` is used, and every migration is idempotent.
+
+2. FILES MODIFIED / CREATED (this phase)
+---------------------------------------
+Created (migrations — apply to the live Supabase project):
+  supabase/migrations/011_document_security.sql
+  supabase/migrations/012_storage_security.sql
+  supabase/migrations/013_realtime_and_notifications.sql
+  supabase/migrations/014_performance_indexes.sql
+
+Modified (frontend):
+  src/contexts/WorkspaceContext.tsx
+      - Real-time subscription to `workspaces` (postgres_changes, event "*",
+        schema public) that invalidates ONLY the `["workspace-bootstrap"]`
+        React Query cache. Channel is per-user (`workspace-updates-<userId>`),
+        removed on unmount, and skipped entirely in mock mode. RLS on the
+        subscribed table filters delivered events to what the user may see.
+  src/components/app/NotificationCenter.tsx
+      - Query key changed from `["notifications", user?.role]` to
+        `["notifications", user?.id, user?.role]` so notification caches are
+        user-scoped (the `invalidateQueries({ queryKey: ["notifications"] })`
+        prefix still matches for cross-user invalidation).
+  src/api/auth.api.ts
+      - Removed TEMP-DEBUG console.log traces from `mergeUser`, `mapSession`,
+        `login`.
+  src/services/AuthService.ts
+      - Removed TEMP-DEBUG console.log from `login`.
+  src/contexts/AuthContext.tsx
+      - Removed TEMP-DEBUG console.log from `login`.
+  src/routes/sitemap[.]xml.ts
+      - Replaced TODO with an explanatory comment on BASE_URL.
+
+3. DATABASE MIGRATIONS (011–014)
+--------------------------------
+011_document_security.sql — document/generation/review RLS ownership model:
+  * GRANTs so the Data API can serve documents, chunks, embeddings,
+    generations, generation_versions, reviews and history to `authenticated`
+    (coarse layer; RLS below is the actual gate). `service_role` granted ALL
+    for symmetry — never used in frontend code.
+  * Staff (reviewer/admin, via `has_full_access`) read policies on documents,
+    generations, chunks, embeddings, generation_versions, history.
+  * Owner read policy on reviews (owners may read their workspace review
+    trail; staff already have FOR ALL from the base schema).
+  * All policies created inside pg_policies existence guards → idempotent.
+  * 001 already covered owner CRUD on documents/generations/chunks/embeddings/
+    versions and staff write on reviews; nothing existing is dropped/rewritten.
+
+012_storage_security.sql — secure Supabase Storage:
+  * Ensures the private `documents` bucket exists (public=false, 100 MB limit,
+    no MIME restriction), layout `<workspaceId>/<documentId>/<fileName>`.
+  * Drops the three lax 002 policies ("any authenticated user can
+    upload/read/delete") and replaces them with ownership-aware ones:
+      upload/update/delete  → workspace owner only
+      download (select)     → workspace owner OR staff (has_full_access)
+  * Adds `storage_workspace_id(text)` (safe uuid extraction from a path) and
+    `get_document_signed_url(text, int DEFAULT 3600)` SECURITY DEFINER — files
+    are only ever served via short-lived signed URLs, never public access.
+
+013_realtime_and_notifications.sql — realtime + notification backend support:
+  * Adds workspaces, documents, generations, reviews and notifications to the
+    `supabase_realtime` publication (guarded by pg_publication_tables).
+  * `create_notification(uuid, uuid, app_role[], text, text, text)` single
+    write point (SECURITY DEFINER).
+  * Triggers: notify_generation_created (AFTER INSERT ON generations),
+    notify_review_finished (AFTER INSERT OR UPDATE ON reviews),
+    notify_document_uploaded (AFTER INSERT ON documents) — all target the
+    workspace owner via the `notifications` table.
+  * Role-targeted read policy ("Staff can read role notifications") so
+    reviewers/admins can receive broadcast notifications via the `roles`
+    array. Existing "Users read their own notifications" policy (001) is
+    untouched. No notification UI added — backend/service support only.
+
+014_performance_indexes.sql — database optimization:
+  * CREATE INDEX IF NOT EXISTS on reviews(workspace_id, created_at DESC),
+    notifications(user_id, read), generations(created_by),
+    documents(workspace_id, created_at DESC), history(workspace_id, created_at
+    DESC), chats(workspace_id, created_at DESC). Fully idempotent, no DROP.
+
+ACTION REQUIRED: apply 011, 012, 013, 014 to the live Supabase project (SQL
+editor, in that order). 008/009/010 are already applied (Phase 7.1/7.2).
+
+4. DB / SECURITY / RLS SUMMARY
+------------------------------
+  * RLS remains enabled on every ownership table (001 base policies) and on
+    workspaces (009). The view predicate + RLS together enforce: student sees
+    only owned rows, reviewer/admin sees all (has_full_access).
+  * New in this phase: staff read path on child tables (011), owner read path
+    on reviews (011), ownership-aware storage policies + signed URLs (012).
+  * No table is readable by the anon role for these surfaces; nothing is
+    served through public storage.
+  * Role checks in the UI still go through `useAuth().can()` /
+    `usePermissions()` / `<RoleGate>` — no inline role comparisons were added.
+
+5. REALTIME / NOTIFICATIONS
+---------------------------
+  * Realtime is consumed only for workspace changes and only invalidates the
+    workspace-bootstrap cache — no broad cache clears, no new polling.
+  * Notifications are written by SECURITY DEFINER triggers (owner-targeted)
+    and read through RLS; the frontend already lists them via
+    NotificationCenter with a now user-scoped query key.
+  * Deliberately no notification UI churn: the schema/policies/triggers land
+    now so the backend (FastAPI/edge) and UI can adopt them later.
+
+6. PERFORMANCE
+--------------
+  * 008 added the composite indexes feeding workspace aggregates.
+  * 014 adds the remaining feed/queue/workload indexes (review queues, unread
+    badges, "my generations", document explorer, history, chats).
+  * The workspace-bootstrap query is the hot path; realtime invalidation keeps
+    it fresh without polling.
+
+7. REACT QUERY IMPROVEMENTS
+---------------------------
+  * Workspace realtime invalidation is scoped to `["workspace-bootstrap"]`
+    (WorkspaceContext.tsx) — never the whole cache.
+  * Notification cache key is now user-scoped
+    `["notifications", user?.id, user?.role]` (NotificationCenter.tsx).
+  * The user-scoped bootstrap key `["workspace-bootstrap", user?.id ?? null]`
+    and AuthContext cache purge (Phase 7.2) remain — no cross-user cache
+    bleed.
+
+8. BUG FIXES (carried into this phase / verified)
+-------------------------------------------------
+  * Stale-workspace bug (deleted-in-Supabase workspace still shown): fixed in
+    7.2 via authoritative server list + hydration that never resurrects
+    deleted workspaces + refetchOnWindowFocus + create/refresh invalidation.
+  * Live-data wrong-role root cause (student account returned reviewer/admin
+    because of stray `user_roles` rows): fixed earlier by migration 010 +
+    data cleanup; 010 hard-fix confirmed (CREATE OR REPLACE has_role /
+    has_full_access + view + comments).
+
+9. HARDENING CLEANUP
+--------------------
+  * Removed all TEMP-DEBUG console.log calls (auth.api.ts, AuthService.ts,
+    AuthContext.tsx).
+  * Grep audit of src for `TEMP-DEBUG|console.log|TODO|FIXME|service_role|
+    bypassrls|.rpc(|supabaseAdmin`:
+      - no TEMP-DEBUG, TODO, FIXME, service_role, bypassrls, .rpc( or
+        supabaseAdmin anywhere in src;
+      - only legitimate console.debug in src/lib/logger.ts and a comment in
+        NotificationContext.tsx.
+  * Secrets audit: no service_role key in the frontend; only the anon-key
+    client in src/lib/supabase.ts; storage bucket is private; bytes are only
+    fetched through signed URLs; no public read surface.
+
+10. MANUAL TESTING CHECKLIST (after applying migrations 011–014)
+---------------------------------------------------------------
+  1. Login as a student → switcher lists only owned workspaces; creating a
+     workspace updates the list; deleting a workspace in Supabase removes it
+     from the UI.
+  2. As a student, verify storage: upload succeeds to your own workspace
+     folder; another student's `get_document_signed_url` raises "access
+     denied to document storage".
+  3. As a reviewer/admin, verify you can read documents/generations/reviews/
+     history across all workspaces but cannot modify others' documents.
+  4. Insert a generation row as service_role → the workspace owner receives a
+     "Generation completed" notification (visible in the notification center).
+  5. Create/update a workspace in another tab → the active tab refreshes the
+     workspace list via realtime (no manual reload).
+  6. Unread badge counts work after notifications; marking read updates the
+     count.
+
+11. KNOWN LIMITATIONS
+---------------------
+  * The base schema (workspaces, documents, generations, profiles,
+    user_roles, app_role) is still not fully captured as real migrations —
+    001–007 are stubs; docs/DATABASE_SCHEMA.md is the reference. Worth
+    folding into migrations eventually.
+  * The `security_invoker = true` conversion of the workspace view is
+    deliberately deferred (needs base-table grants + child-table RLS — Phase
+    7.3 already covers child-table RLS, so this is now low-risk but still
+    optional).
+  * Notification triggers fire on INSERT/UPDATE regardless of who wrote the
+    row; duplicate-ish notifications on repeated UPDATEs are possible
+    (acceptable for the lightweight model).
+  * The signed-URL helper returns the URL from Supabase storage admin; if the
+    project has no storage credentials configured the call fails loudly —
+    expected until storage is wired.
+  * Realtime requires the Supabase project's realtime service to be enabled
+    for the added tables (migration 013 only handles the publication).
+
+12. PHASE 8 RECOMMENDATIONS
+---------------------------
+  * Convert `workspace_with_owner` to `security_invoker = true` and add the
+    matching base-table grants + policies (now unblocked by 011).
+  * Wire file upload/download through `get_document_signed_url` in the
+    backend (FastAPI) and surface generation/review notifications in the UI.
+  * Add row-level audit via `history` + storage events (who read what).
+  * Add rate limiting / abuse protection on the FastAPI proxy and storage
+    upload endpoints.
+  * Capture the base schema in real migrations (001–007) and enable
+    `supabase db` tooling in CI.
+
+13. COMMANDS RUN
+----------------
+  npx tsc --noEmit            -> 0 errors
+  npm run lint                -> 0 errors (pre-existing react-refresh
+                                 warnings only, 13 warnings)
+  npm run build               -> client + SSR + Nitro (cloudflare-module)
+                                 built successfully
+  npx prettier --write src/contexts/WorkspaceContext.tsx (fixed 3 lint
+                                 errors from formatting)
+
+14. VERIFICATION RESULTS
+------------------------
+  * tsc:      0 errors.
+  * eslint:   0 errors, 13 warnings — all pre-existing
+              react-refresh/only-export-components in UI/context files.
+  * build:    vite client build (2.38s) + SSR build (1.29s) + Nitro server
+              (cloudflare-module preset) all succeeded.
+
+15. ARCHITECTURE IMPACT
+-----------------------
+  * UI still never imports `src/api` or `src/mock` directly (service layer
+    only).
+  * Services remain the only place backend behaviour changes.
+  * The single Supabase client in `src/lib/supabase.ts` is the only
+    credential holder; all network access still flows through
+    `src/api/http.ts` for FastAPI calls.
+  * Workspace-owned data still comes from `useWorkspace().data`, scoped by the
+    active workspace.
+
+16. DESIGN DECISIONS
+--------------------
+  * SECURITY DEFINER helpers (has_role/has_full_access/signed URL) kept, with
+    explicit search_path; has_full_access(NULL) = true is intentional for
+    trusted non-JWT contexts — do not change without auditing service_role /
+    cron callers.
+  * Policies created idempotently via pg_policies guards; functions via
+    CREATE OR REPLACE; indexes via CREATE INDEX IF NOT EXISTS.
+  * Realtime invalidation deliberately narrow (single query key) to avoid
+    refetch storms.
+  * Storage policies key off the first path segment (workspace uuid), so no
+    new metadata column is needed to scope ownership.
+
+17. MOCK-MODE CONFIRMATION
+--------------------------
+  * `isMockMode()` (src/config/env.ts) = VITE_ENABLE_MOCK || API_BASE_URL ===
+    "/api". Mock is on by default (`npm run dev`).
+  * The realtime effect returns early when `isMockMode()` is true; supabase
+    imports in WorkspaceContext are inert in mock mode.
+  * All changes are additive; no mock behaviour was altered. Seeded workspaces
+    carry owner/counts so the switcher and notification center render as
+    before.
+
+18. NOTES
+--------
+  * The vite-tsconfig-paths plugin notice during build is informational
+    (vite 8 native tsconfigPaths support); no change made.
+  * dist/ artifacts from `npm run build` were generated but are build output
+    and are not part of the source diff.
