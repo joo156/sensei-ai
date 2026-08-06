@@ -1,0 +1,147 @@
+# Phase 7 — Architecture Review & Implementation Plan
+
+Scope note: the repo contains **zero SQL migrations** (`glob **/*.sql` → none; no `supabase/` dir). The schema/RLS lives only in the live Supabase project. Everything below that touches the database is inferred from `docs/DATABASE_SCHEMA.md`, `docs/SUPABASE_INTEGRATION.md`, and `src/types/database.types.ts`, and must be verified against the live project (`pg_policies`) before migrating.
+
+---
+
+## 1. Why deleted workspaces survive a refresh
+
+Yes — **WorkspaceContext restores stale local state and overwrites the fresh Supabase list.** The app has no `deleteWorkspace` path at all (searched: only `deleteDocument` exists), so the deletion happened in the Supabase dashboard; the bug is that the client re-hydrates the deleted row from localStorage.
+
+The chain:
+
+1. `WorkspaceProvider` fetches via `WorkspaceService.bootstrap()` → `getWorkspaceBootstrap()` → Supabase `getWorkspaces()` (`src/api/workspace.api.ts:59-71`). The deleted row is correctly absent from the server result.
+2. The fresh list seeds `<WorkspaceStore seedWorkspaces={data.workspaces}>` (`src/contexts/WorkspaceContext.tsx:96`) and initial state `useState(seedWorkspaces)` (`:112`). So far correct.
+3. The **hydration effect** (`src/contexts/WorkspaceContext.tsx:117-133`) then reads `cortexa.workspace.state` and overwrites server truth:
+
+```
+src/contexts/WorkspaceContext.tsx:122  if (parsed.workspaces?.length) setWorkspaces(parsed.workspaces);
+src/contexts/WorkspaceContext.tsx:123  if (parsed.store) setStore(parsed.store);
+src/contexts/WorkspaceContext.tsx:124  if (parsed.activeId) setActiveId(parsed.activeId);
+```
+
+Line **122** is the responsible line. It unconditionally replaces the server-fresh list with the persisted snapshot whenever the snapshot is non-empty — the deleted id is back.
+
+4. `active` resolves to the stale entry (`:164` `workspaces.find(...) ?? workspaces[0] ?? null`), mutations write into `store[deletedId]`, and the persistence effect (`:136-147`) re-writes the stale snapshot to `cortexa.workspace.state` after every change — so it survives indefinitely until localStorage is cleared.
+
+Two secondary aggravators worth fixing in the same phase:
+- The state key `cortexa.workspace.state` is **not namespaced per user** (`STORAGE_KEYS`, `src/constants/index.ts:44-49`) — account A's workspaces leak into account B's session.
+- In Supabase mode `getWorkspace`/`getWorkspaceBootstrap` still return **mock seed data** (`src/api/workspace.api.ts:83,163` `seedWorkspaceData[id] ?? emptyWorkspaceData()`), so the "store" is never the user's real DB rows.
+
+---
+
+## 2. Workspace visibility
+
+Current: every authenticated user sees every workspace. Given the repo has no migrations, the RLS policy in `docs/SUPABASE_INTEGRATION.md:44-45` (`owner_id = auth.uid()`) is either **not applied** or RLS is disabled in the live project — otherwise even the doc sketch would hide others' workspaces. Either way the observed behavior means there is **no enforceable visibility today**, and the policy that should exist is only `owner`-scoped, not role-aware.
+
+Desired matrix (role of the **row's owner** decides, not the viewer's own role alone):
+
+| Viewer role | Visible workspaces | RLS predicate |
+|---|---|---|
+| student | own only | `owner_id = auth.uid()` |
+| reviewer | own + all student-owned | `owner_id = auth.uid()` OR `owner_role = 'student'` |
+| admin | everything | `true` |
+
+A reviewer must not see other reviewers' or admins' private workspaces; students never see other students'.
+
+---
+
+## 3. Database — is `owner_id` alone sufficient?
+
+**Sufficient — no new table needed.** Visibility is derived purely from `workspaces.owner_id` + the owner's role, and the desired behavior has no sharing/collaboration concept. A `workspace_members` table would be YAGNI for this phase.
+
+The missing pieces are the role-lookup primitives, not the schema:
+- `user_roles` table (already specified: `id`, `user_id`, `role app_role`, unique `(user_id, role)`) must exist and be populated for every workspace owner.
+- A `has_role(user_id uuid, role app_role)` **security-definer** function (already documented at `docs/SUPABASE_INTEGRATION.md:30`) is required — RLS can't join to `user_roles` inline easily, so the helper is the enabler.
+- An index on `workspaces.owner_id` (and `user_roles.user_id`) for the policy lookups.
+
+Minimum *changes*: none to `workspaces`. Minimum *additions*: `app_role` enum + `has_role()` + a migration file in the repo (source of truth).
+
+Known fragility (not blocking but note it): `mergeUser` reads roles with `.limit(1).maybeSingle()` (`src/api/auth.api.ts:56-66`), so a multi-role user is collapsed to one role. Fine while users have exactly one role row; the DB model already supports more.
+
+---
+
+## 4. RLS policies that must change
+
+No policies are verifiable from the repo (no migrations). The required set on `public.workspaces` (all new, since none are provably applied):
+
+- **SELECT**: the visibility matrix above — a single policy with OR branches.
+- **INSERT**: `WITH CHECK (owner_id = auth.uid())` (any authenticated user may create their own).
+- **UPDATE / DELETE**: `USING (owner_id = auth.uid() OR has_role(auth.uid(), 'admin'))` (admins manage all — matches `workspace:manage`).
+- **GRANTs**: `SELECT,INSERT,UPDATE,DELETE` to `authenticated`, `ALL` to `service_role`.
+- **Child tables** (`documents`, `chunks`, `embeddings`, `generations`, `generation_versions`, `reviews`, `chats`, `chat_messages`, `history`, `analytics`): all carry `workspace_id`; they must mirror workspace visibility. They are still mock/FastAPI-backed in the app today, so I recommend a shared `is_workspace_visible_to(uid, workspace_id)` SECURITY DEFINER helper now, and applying child-table policies in a follow-up migration when those API layers migrate — not stubbed in this phase.
+- **`user_roles`**: SELECT scoped to `user_id = auth.uid()` (so `mergeUser` reads own row only; nobody reads others' roles client-side). `profiles`: readable by authenticated (needed for owner-name labels).
+
+---
+
+## 5. Workspace queries needing role-aware filtering
+
+Supabase-backed today (RLS is the enforcement point — never client-side role filtering, per `AGENTS.md` #2/#4 and `docs/BACKEND_CONTRACT.md` rule 1):
+
+| Query | Location | Requires role-aware filtering |
+|---|---|---|
+| `getWorkspaces` (list) | `src/api/workspace.api.ts:59` | **Yes — the core list query** |
+| `getWorkspace(id)` | `src/api/workspace.api.ts:73` | Yes (RLS hides row → "not found") |
+| `getWorkspaceBootstrap` | `src/api/workspace.api.ts:153` | Yes (delegates to list) |
+| `createWorkspace` | `src/api/workspace.api.ts:94` | RLS insert policy (own) — no role filter |
+| `updateWorkspace` | `src/api/workspace.api.ts:135` | RLS owner/admin |
+| delete (doesn't exist) | — | Add only if UI gets delete |
+
+Child-table workspace queries (`document.api.ts:73`, `review.api.ts:52,59`, `chat.api.ts:53`, `history.api.ts:8,14`, `analytics.api.ts:15`, `search.api.ts:54`, `generation.api.ts` via `getWorkspaceData`) go through `http`/mock today. They inherit visibility from `workspace_id` once they migrate to Supabase; no client changes needed now.
+
+---
+
+## 6. How stale workspaces survive deletion (WorkspaceContext)
+
+Root cause is fully traced in §1. Summary of the survival mechanism:
+
+1. Fresh server list arrives correct (`WorkspaceContext.tsx:96,112`).
+2. Hydration effect overwrites it from `cortexa.workspace.state` (`WorkspaceContext.tsx:122`), also restoring the stale `store` (`:123`) and `activeId` (`:124`).
+3. `active` falls back to the stale entry (`:164`); `setActive` only validates against the *stale* list (`:149-155`).
+4. The persist effect (`:136-147`) writes the resurrected rows back, so the loop self-perpetuates.
+
+The design intent (survive reload of notes/chats/review history) is legitimate, but the implementation treats the persisted workspace **list** as authoritative instead of the server.
+
+---
+
+## 7. Implementation plan (no code written)
+
+### Database migration
+- First repo migration: `supabase/migrations/<ts>_workspace_visibility.sql`.
+- `CREATE TYPE app_role` (if not exists); `CREATE FUNCTION has_role(uuid, app_role)` SECURITY DEFINER, pinned `search_path`.
+- Ensure `user_roles` exists (`user_id` FK `auth.users`, unique `(user_id, role)`); index `user_roles(user_id)`.
+- Index `workspaces(owner_id)`.
+- Data backfill: give existing workspace owners + demo accounts their role rows.
+- (Recommended, optional) `CREATE FUNCTION is_workspace_visible_to(uid, workspace_id)` SECURITY DEFINER for later child-table reuse.
+
+### RLS
+- Enable RLS + GRANTs on `workspaces`.
+- Policies: SELECT (visibility matrix), INSERT (`owner_id = auth.uid()`), UPDATE/DELETE (owner or admin).
+- Scope `user_roles` SELECT to own rows; leave `profiles` authenticated-readable.
+- Child tables: deferred to their migration phase (see §4), sharing the helper.
+
+### API (`src/api/workspace.api.ts`)
+- Stop merging mock seed data into Supabase responses (`:83`, `:163`) → return `emptyWorkspaceData()` until real child queries exist. This is a **visibility correctness fix** (mock data must never leak across users).
+- Leave list/insert/update as-is — RLS filters; no client-side role filtering.
+- Optional: include `owner_id`/owner name in the list response for switcher labels (requires a `profiles` join).
+
+### Service (`src/services/WorkspaceService.ts`)
+- No structural change; visibility is data-level.
+- Optional: add `deleteWorkspace` only if a delete UI lands.
+
+### Context (`src/contexts/WorkspaceContext.tsx`)
+- Fix the hydration effect (`:117-133`): **always trust `seedWorkspaces` for the list**; persist only `activeId` (validated against the fresh list) and per-workspace draft data; reconcile the `store` to ids present in the fresh list; drop stale entries.
+- Namespace the persistence key per user id (`cortexa.workspace.state.<userId>`) so account switching never leaks.
+- Keep `active` null-safe fallback as-is (`:164`).
+
+### UI
+- Workspace switcher: show owner name for non-owned workspaces in reviewer/admin views (only if API adds `ownerId`/`ownerName`).
+- Create-workspace flow, `RoleGate`, and `NoActiveWorkspace` unchanged.
+- Delete action (if added): owner/admin only.
+
+### Testing
+- **DB**: SQL test asserting the exact visibility matrix across student A, student B, reviewer, admin (run per-role, assert returned id sets).
+- **Context**: unit test reproducing the regression — bootstrap list without the deleted id + localStorage snapshot containing it → assert deleted id dropped and `activeId` falls back. Test account-switch key isolation.
+- **API/Service**: mock-mode mapping unchanged; verify Supabase path has no client-side filtering.
+- **E2E**: three accounts each see the correct list; dashboard-deleted workspace disappears on refresh; switching accounts shows no leakage.
+- Gate on `npx tsc --noEmit`, `npm run lint`, `npm run build`.
