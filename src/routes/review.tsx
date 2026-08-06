@@ -44,7 +44,7 @@ export const Route = createFileRoute("/review")({
     ],
   }),
   component: () => (
-    <RoleGate allow={["reviewer", "admin"]}>
+    <RoleGate allow={["reviewer", "admin"]} permission="review:approve">
       <Review />
     </RoleGate>
   ),

@@ -1,76 +1,82 @@
 /**
- * Auth service — the single seam between the UI and whatever identity provider
- * is in use. Today: mock accounts. Tomorrow: Supabase Auth (see
- * docs/SUPABASE_INTEGRATION.md) — only this file and `auth.api.ts` change.
+ * Auth service — the single seam between the UI and the identity provider.
+ *
+ * Supabase Auth is the single source of truth: the Supabase client owns all
+ * session storage (persistSession) and refresh logic. This service only maps
+ * sessions into the app's shape and hands them to AuthContext — no
+ * localStorage here.
  */
+import { supabase } from "@/lib/supabase";
 import * as authApi from "@/api/auth.api";
 import { setAccessToken } from "@/api/http";
-import { STORAGE_KEYS } from "@/constants";
 import type { AuthUser, Session } from "@/types/api/auth.contracts";
 
-function persist(session: Session | null) {
-  if (typeof window === "undefined") return;
-  try {
-    if (session) window.localStorage.setItem(STORAGE_KEYS.session, JSON.stringify(session));
-    else window.localStorage.removeItem(STORAGE_KEYS.session);
-  } catch {
-    /* storage unavailable */
-  }
-}
+/** Last known session, kept in memory so restoreSession() stays synchronous. */
+let cachedSession: Session | null = null;
 
-function readPersisted(): Session | null {
-  if (typeof window === "undefined") return null;
+// Supabase's getSession() is async, but AuthContext calls restoreSession()
+// synchronously at boot. Kick the read off here (module load) so the persisted
+// session is cached before the first render's effect runs.
+void (async () => {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEYS.session);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Session> & Partial<AuthUser>;
-    // Tolerate the legacy shape where only the user object was stored.
-    if ((parsed as Session).user) return parsed as Session;
-    const legacy = parsed as AuthUser;
-    if (!legacy.email) return null;
-    return {
-      access_token: "mock-legacy",
-      refresh_token: "mock-legacy",
-      expires_at: Date.now() + 3600_000,
-      user: { ...legacy, id: legacy.id ?? legacy.email },
-    };
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session) return;
+    const session = await authApi.mapSession(data.session);
+    if (!session) return;
+    cachedSession = session;
+    setAccessToken(session.access_token);
   } catch {
-    return null;
+    /* Supabase not configured yet — app starts signed out. */
   }
-}
+})();
 
 export const AuthService = {
-  /** Restore a session at boot (localStorage today, Supabase getSession later). */
+  /**
+   * Restore the persisted Supabase session at boot.
+   * Synchronous by design: the value is hydrated from `supabase.auth.getSession()`.
+   */
   restoreSession(): Session | null {
-    const session = readPersisted();
-    setAccessToken(session?.access_token ?? null);
-    return session;
+    setAccessToken(cachedSession?.access_token ?? null);
+    return cachedSession;
   },
 
+  /** Sign in with email + password and cache the resulting session. */
   async login(email: string, password: string): Promise<Session> {
     const { session } = await authApi.login({ email, password });
-    persist(session);
+    // TEMP-DEBUG: trace what AuthService receives from the api layer
+    console.log("[AuthService.login] session from api =", session);
+    cachedSession = session;
     setAccessToken(session.access_token);
     return session;
   },
 
+  /** Sign the user out, clearing the cached session. */
   async logout(): Promise<void> {
     await authApi.logout();
-    persist(null);
+    cachedSession = null;
     setAccessToken(null);
   },
 
+  /** Resolve the current user, merging profiles + user_roles into AuthUser. */
   async getCurrentUser(): Promise<AuthUser | null> {
-    const session = readPersisted();
-    const { user } = await authApi.getCurrentUser(session);
+    const { user } = await authApi.getCurrentUser(cachedSession);
     return user;
   },
 
+  /** Refresh the active session, falling back to the persisted session if needed. */
   async refreshSession(): Promise<Session | null> {
-    const current = readPersisted();
-    if (!current) return null;
-    const { session } = await authApi.refreshSession(current);
-    persist(session);
+    if (cachedSession) {
+      const { session } = await authApi.refreshSession(cachedSession);
+      cachedSession = session;
+      setAccessToken(session.access_token);
+      return session;
+    }
+
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return null;
+    const session = await authApi.mapSession(data.session);
+    if (!session) return null;
+    cachedSession = session;
     setAccessToken(session.access_token);
     return session;
   },

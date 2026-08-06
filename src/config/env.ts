@@ -23,7 +23,7 @@ export const env = {
   /** Supabase project URL (placeholder until Cloud/Supabase is enabled). */
   SUPABASE_URL: readEnv("VITE_SUPABASE_URL", ""),
   /** Supabase publishable/anon key (safe for the browser). */
-  SUPABASE_KEY: readEnv("VITE_SUPABASE_PUBLISHABLE_KEY", ""),
+  SUPABASE_ANON_KEY: readEnv("VITE_SUPABASE_ANON_KEY", ""),
   /** When true, the API layer resolves from `src/mock` instead of the network. */
   ENABLE_MOCK: readBool("VITE_ENABLE_MOCK", true),
   /** Default AI provider id used by the model selector. */

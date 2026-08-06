@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Download, Sparkles, Wand2 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { RoleGate } from "@/components/app/RoleGate";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -41,7 +42,11 @@ export const Route = createFileRoute("/generate")({
       },
     ],
   }),
-  component: Generate,
+  component: () => (
+    <RoleGate allow={["student", "reviewer", "admin"]}>
+      <Generate />
+    </RoleGate>
+  ),
 });
 
 const types = ["MCQ", "True/False", "Short Answer"] as const;

@@ -39,7 +39,7 @@ export const Route = createFileRoute("/analytics")({
     ],
   }),
   component: () => (
-    <RoleGate allow={["admin"]}>
+    <RoleGate allow={["admin"]} permission="analytics:read">
       <Analytics />
     </RoleGate>
   ),
