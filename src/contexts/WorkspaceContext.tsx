@@ -8,7 +8,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { emptyWorkspaceData } from "@/lib/workspace";
+import { useAuth } from "@/contexts/AuthContext";
 import { WorkspaceService } from "@/services";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
@@ -39,6 +41,8 @@ interface WorkspaceCtx {
   active: Workspace | null;
   setActive: (id: string) => void;
   addWorkspace: (input: { name: string; description: string }) => Promise<Workspace>;
+  /** Refetch the workspace list from the server. */
+  refreshWorkspaces: () => void;
   /** Data scoped to the active workspace — switching swaps everything. */
   data: WorkspaceData;
   addDoc: (doc: WsDoc) => void;
@@ -68,8 +72,11 @@ function nowStamp() {
  * Keeps the provider itself free of any mock/seed import.
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { data, isPending, error, refetch } = useServiceQuery(["workspace-bootstrap"], () =>
-    WorkspaceService.bootstrap(),
+  const { user } = useAuth();
+  const { data, isPending, error, refetch } = useServiceQuery(
+    ["workspace-bootstrap", user?.id ?? null],
+    () => WorkspaceService.bootstrap(),
+    { refetchOnWindowFocus: true },
   );
 
   if (isPending) {
@@ -112,24 +119,37 @@ function WorkspaceStore({
   const [workspaces, setWorkspaces] = useState<Workspace[]>(seedWorkspaces);
   const [store, setStore] = useState<Record<string, WorkspaceData>>(seedStore);
   const hydrated = useRef(false);
+  const queryClient = useQueryClient();
 
-  // Load persisted state after hydration.
+  // Restore persisted UI state after hydration. The workspace LIST always comes
+  // from the server (seedWorkspaces) — a stale local copy must never override
+  // it. Only the active id and per-workspace draft data are restored, scoped to
+  // workspaces that still exist on the server.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STATE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PersistShape;
-        if (parsed.workspaces?.length) setWorkspaces(parsed.workspaces);
-        if (parsed.store) setStore(parsed.store);
-        if (parsed.activeId) setActiveId(parsed.activeId);
+      const parsed = raw ? (JSON.parse(raw) as PersistShape) : null;
+      const ids = new Set(seedWorkspaces.map((w) => w.id));
+      if (parsed) {
+        if (parsed.store) {
+          setStore(Object.fromEntries(Object.entries(parsed.store).filter(([id]) => ids.has(id))));
+        }
+        if (parsed.activeId && ids.has(parsed.activeId)) setActiveId(parsed.activeId);
       } else {
         const legacy = window.localStorage.getItem(STORAGE_KEY);
-        if (legacy && seedWorkspaces.some((w) => w.id === legacy)) setActiveId(legacy);
+        if (legacy && ids.has(legacy)) setActiveId(legacy);
       }
     } catch {
       /* ignore */
     }
     hydrated.current = true;
+  }, [seedWorkspaces]);
+
+  // The server list is authoritative: whenever the bootstrap query refreshes
+  // (window focus, reconnect, or invalidation after a mutation), propagate it
+  // into state so workspaces deleted outside the app disappear immediately.
+  useEffect(() => {
+    setWorkspaces(seedWorkspaces);
   }, [seedWorkspaces]);
 
   // Persist everything so notes, chats and review history survive a reload.
@@ -174,6 +194,9 @@ function WorkspaceStore({
       workspaces,
       active,
       setActive,
+      refreshWorkspaces: () => {
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      },
       addWorkspace: async ({ name, description }) => {
         const result = await WorkspaceService.createWorkspace({ name, description });
         if (!result.success) throw new Error(result.error.message);
@@ -181,6 +204,7 @@ function WorkspaceStore({
         setWorkspaces((prev) => [...prev, workspace]);
         setStore((prev) => ({ ...prev, [workspace.id]: emptyWorkspaceData() }));
         setActiveId(workspace.id);
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
         return workspace;
       },
       data,
@@ -247,7 +271,7 @@ function WorkspaceStore({
         mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] }));
       },
     };
-  }, [activeId, setActive, store, mutate, workspaces]);
+  }, [activeId, queryClient, setActive, store, mutate, workspaces]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

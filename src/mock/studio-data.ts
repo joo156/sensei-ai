@@ -19,8 +19,15 @@ export const workspaces: Workspace[] = [
     docs: 3,
     assets: 148,
     pendingReview: 3,
+    generations: 42,
+    reviewStatus: "Pending",
     lastActive: "12 minutes ago",
     accent: "primary",
+    owner: {
+      id: "user-student",
+      name: "Amira Rahman",
+      email: "student@demo.com",
+    },
   },
   {
     id: "operating-systems",
@@ -29,8 +36,15 @@ export const workspaces: Workspace[] = [
     docs: 2,
     assets: 86,
     pendingReview: 1,
+    generations: 23,
+    reviewStatus: "Pending",
     lastActive: "Yesterday",
     accent: "info",
+    owner: {
+      id: "user-reviewer",
+      name: "Noor Patel",
+      email: "reviewer@demo.com",
+    },
   },
   {
     id: "networking",
@@ -39,8 +53,15 @@ export const workspaces: Workspace[] = [
     docs: 4,
     assets: 61,
     pendingReview: 0,
+    generations: 17,
+    reviewStatus: "Approved",
     lastActive: "3 days ago",
     accent: "success",
+    owner: {
+      id: "user-admin",
+      name: "Kenji Ito",
+      email: "admin@demo.com",
+    },
   },
   {
     id: "algorithms",
@@ -49,8 +70,15 @@ export const workspaces: Workspace[] = [
     docs: 2,
     assets: 34,
     pendingReview: 2,
+    generations: 9,
+    reviewStatus: "Needs Edit",
     lastActive: "Last week",
     accent: "warning",
+    owner: {
+      id: "user-student",
+      name: "Amira Rahman",
+      email: "student@demo.com",
+    },
   },
 ];
 

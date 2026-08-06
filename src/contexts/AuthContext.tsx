@@ -16,6 +16,7 @@ import {
 import { AuthService } from "@/services/AuthService";
 import { ReviewService } from "@/services/ReviewService";
 import { ROLE_HOME, type Permission } from "@/constants";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { AuthUser, Session } from "@/types/api/auth.contracts";
 import type { UserRole } from "@/types/database.types";
@@ -57,13 +58,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const user = session?.user ?? null;
 
-  const login = useCallback(async (email: string, password: string) => {
-    const next = await AuthService.login(email, password);
-    // TEMP-DEBUG: trace what AuthContext stores in state
-    console.log("[AuthContext.login] storing session =", next, "| role =", next.user.role);
-    setSession(next);
-    return next.user;
-  }, []);
+  const queryClient = useQueryClient();
+
+  /**
+   * Drop cached workspace-bootstrap entries for every user other than
+   * `currentUserId`. The bootstrap query key is user-scoped
+   * (["workspace-bootstrap", userId]), so without this purge the previous
+   * account's workspace list would linger in the cache after an auth change.
+   * The current user's entry is kept so switching identity never triggers an
+   * extra refetch of already-fresh data.
+   */
+  const clearOtherUsersWorkspaces = useCallback(
+    (currentUserId: string | null) => {
+      queryClient.removeQueries({
+        queryKey: ["workspace-bootstrap"],
+        predicate: (query) => !query.queryKey.some((part) => part === currentUserId),
+      });
+    },
+    [queryClient],
+  );
+
+  const login = useCallback(
+    async (email: string, password: string) => {
+      const next = await AuthService.login(email, password);
+      // TEMP-DEBUG: trace what AuthContext stores in state
+      console.log("[AuthContext.login] storing session =", next, "| role =", next.user.role);
+      setSession(next);
+      clearOtherUsersWorkspaces(next.user.id);
+      return next.user;
+    },
+    [clearOtherUsersWorkspaces],
+  );
 
   const signIn = useCallback(
     async (email: string, password: string) => {
@@ -83,7 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     await AuthService.logout();
     setSession(null);
-  }, []);
+    clearOtherUsersWorkspaces(null);
+  }, [clearOtherUsersWorkspaces]);
 
   const signOut = useCallback(() => {
     void logout();
@@ -92,7 +118,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshSession = useCallback(async () => {
     const next = await AuthService.refreshSession();
     setSession(next);
-  }, []);
+    clearOtherUsersWorkspaces(next?.user.id ?? null);
+  }, [clearOtherUsersWorkspaces]);
 
   const getCurrentUser = useCallback(() => AuthService.getCurrentUser(), []);
 

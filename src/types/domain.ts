@@ -181,8 +181,15 @@ export interface Workspace {
   docs: number;
   assets: number;
   pendingReview: number;
+  generations: number;
+  reviewStatus: ReviewState;
   lastActive: string;
   accent: WorkspaceAccent;
+  owner: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 /* ── Search ───────────────────────────────────────────────────────────── */

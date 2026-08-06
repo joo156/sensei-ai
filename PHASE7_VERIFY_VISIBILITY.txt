@@ -1,0 +1,323 @@
+## Objective
+- Complete Phase 7.2 (workspace visibility + refresh) — done, then update migration 009 for idempotency — done, then (current task) perform a verification-only audit of the entire Supabase visibility chain to explain why a student account still sees every workspace, writing findings to `PHASE7_VERIFY_VISIBILITY.txt`.
+- Current task constraint: NO code changes. Verify only, in the ordered steps the user listed (view SQL → API query → bootstrap chain → RLS bypass scan → root cause explanation).
+
+## Important Details
+- User confirmed: Phase 7.2 RLS migration (009) has already been applied to the live Supabase project, yet a student account still sees every workspace — verification must find the root cause, not propose fixes.
+- Mock mode is OFF in the live config: `.env.local` sets `VITE_ENABLE_MOCK=false`, `VITE_API_BASE_URL=http://localhost:8000`, real `VITE_SUPABASE_URL` + anon key. `src/config/env.ts` `isMockMode() = env.ENABLE_MOCK || env.API_BASE_URL === "/api"` → returns false here, so the real Supabase path runs.
+- Only ONE Supabase client exists (`src/lib/supabase.ts`), created with the anon key (`config.SUPABASE_KEY ?? env.SUPABASE_ANON_KEY`) — no service_role key, no `supabaseAdmin`/admin client, no `.rpc(` calls found anywhere in `src/`.
+- Earlier `dbProps`/`PGRST301` plan was abandoned and reverted: research showed PGRST301 is a JWT-verification error (401), NOT a "security_definer_view" error; `"*"` on the view works in the live project, so `getWorkspaces()`/`getWorkspace()` keep plain `.select("*")`.
+- `src/routes/__root.tsx` consumes the single QueryClient from `getRouter()` (verified), so only `src/router.tsx` needed `refetchOnWindowFocus: true`.
+- Migration 009 was rewritten (per user request) to detect-and-create functions via `to_regprocedure` guards — no DROP, no CREATE OR REPLACE on functions (documented why: OR REPLACE silently overwrites; DROP is destructive on dependent policies/view).
+- CRITICAL NEW FACT: `supabase/migrations/001_initial_schema.sql` is NOT an empty stub — recent grep found ~600+ lines including `create or replace function public.has_role(uuid, app_role)` (line 450), grants (line 468), RLS policies on `workspaces` using `owner_id = auth.uid()` (lines 611-612), plus more policies (lines 593-623+). This supersedes the earlier "001-007 are empty stubs" note and is the prime suspect for the root cause (see Work State/Active). Also `003_policy.sql` contains two policies (`auth.uid() = id`, `auth.uid() = user_id`) — not empty either.
+- No local Postgres/Docker available — verification is static (file reads + greps only).
+
+## Work State
+### Completed
+- Full Phase 7.2 implementation delivered and validated (tsc 0 errors, lint 0 errors with pre-existing react-refresh warnings only, `npm run build` passes):
+  - `src/contexts/WorkspaceContext.tsx` — hydration no longer overwrites the list from localStorage (only restores `activeId` + draft `store`, filtered to server-known ids); sync `useEffect` propagates `seedWorkspaces` into state on every query refresh; `refetchOnWindowFocus: true` on bootstrap query; new `refreshWorkspaces()` and `addWorkspace()` both invalidate `["workspace-bootstrap"]`; removed unused `BootstrapWorkspacesResponse` import; deps array includes `queryClient`.
+  - `src/router.tsx` — `new QueryClient({ defaultOptions: { queries: { refetchOnWindowFocus: true } } })`.
+  - `src/components/app/AppShell.tsx` — `WorkspaceSwitcher` redesigned: stacked rows (name → `w.owner.name`/`w.owner.email` → `ReviewBadge` + `w.pendingReview`/`w.generations`/`w.docs` counts, dimmed via `opacity-60` when role is student); RefreshCw header button wired to `refreshWorkspaces()` + toast; `ReviewBadge` import added; mock seeds already carry `owner`, `generations`, `reviewStatus`, counts.
+  - `supabase/migrations/009_workspace_visibility.sql` — idempotent version written: `app_role` enum guarded by pg_type check; `user_roles` `CREATE TABLE IF NOT EXISTS`; `has_role(uuid, public.app_role)` and `has_full_access(uuid)` now created inside `DO $$` blocks guarded by `to_regprocedure(...)`; RLS policies created inside pg_policies existence-check DO block (`workspace_owner_access` FOR ALL owner_id=auth.uid(), `workspace_staff_read` SELECT has_full_access, `workspace_staff_write` UPDATE has_full_access); indexes `idx_workspaces_owner_id`, `idx_user_roles_user_id`; view re-created with `WHERE public.has_full_access((select auth.uid())) OR w.owner_id = (select auth.uid());`; grants re-issued. Header comment documents per-object idempotency.
+  - `PHASE7_2_IMPLEMENTATION_RESULT.txt` written; includes new section 6 "UPDATE — IDEMPOTENT MIGRATION 009" (detect-and-create rationale) and renumbered section 7 for remaining work.
+- Verification so far (current task):
+  - 009 view predicate (exact): line 195-196 — `WHERE public.has_full_access((select auth.uid())) OR w.owner_id = (select auth.uid());`.
+  - 008 header confirms view is security-definer ("A plain (security-definer) view"); exact view SELECT body not yet fully printed (read was truncated).
+  - API `getWorkspaces()` (exact): `supabase.from("workspace_with_owner").select("*").order("created_at", { ascending: true })`, errors via `toError`, rows cast to `DbWorkspaceWithOwner[]` and mapped with `mapWorkspace`.
+  - Bootstrap chain confirmed up to: `WorkspaceProvider` uses `useServiceQuery(["workspace-bootstrap"], () => WorkspaceService.bootstrap(), { refetchOnWindowFocus: true })` (WorkspaceContext.tsx:74-78) → `WorkspaceService.bootstrap()` calls `workspaceApi.getWorkspaceBootstrap()` via `attempt`. `getWorkspaceBootstrap()` body NOT yet read.
+  - Bypass scan (grep for `service_role|supabaseAdmin|createClient|SERVICE_KEY|\.rpc\(|SECURITY DEFINER|bypassrls`): no app code contains service credentials or RPC; the only matches are docs/result-file mentions (`GRANT ALL ... TO service_role` in docs/SUPABASE_INTEGRATION.md:42) and the migration functions themselves.
+
+### Active
+- Verification is IN PROGRESS, not finished — `PHASE7_VERIFY_VISIBILITY.txt` NOT yet written.
+- Root-cause investigation hypothesis forming: `001_initial_schema.sql` already defines `public.has_role(uuid, app_role)` (line 450, CREATE OR REPLACE) and RLS policies on `workspaces` (lines 611-612). If 001's version of `has_role`/`user_roles` semantics differ from 009's assumptions (e.g., different body, roles seeded/populated differently, or a student row carrying reviewer/admin), then:
+  - 009's `to_regprocedure('public.has_role(uuid, public.app_role)')` guard SKIPS creating its definition (existing one wins), and/or
+  - `has_full_access(auth.uid())` could return true for the student, making the view's WHERE pass for every row.
+- Also still to check: `001`'s `user_roles`/role-seeding DDL, `001`'s exact `has_role` body, `003_policy.sql` policies, `002/005/006` contents, and `getWorkspaceBootstrap()` body.
+
+### Blocked
+- No local Postgres/psql/Docker — cannot live-query the applied 009 state; must rely on static analysis of migration files.
+- User constraint for current task: no code edits — only inspect and write `PHASE7_VERIFY_VISIBILITY.txt`.
+
+## Next Move
+1. Read `supabase/migrations/001_initial_schema.sql` fully — compare its `has_role` body/return type, `user_roles` DDL, role-seeding rows, and `workspaces` RLS policies against 009's expectations; this is the primary root-cause candidate.
+2. Read `003_policy.sql`, `005_RLS_test.sql`, `006_policies_test.sql`, `002_storage_policies.sql` to complete the RLS picture.
+3. Read the `getWorkspaceBootstrap()` body in `src/api/workspace.api.ts` to finish printing the execution chain: WorkspaceProvider → useServiceQuery `["workspace-bootstrap"]` → `WorkspaceService.bootstrap()` → `workspaceApi.getWorkspaceBootstrap()` → `getWorkspaces()` → `workspace_with_owner`.
+4. Compose the answer file `PHASE7_VERIFY_VISIBILITY.txt` with: (1) view SQL answer — SECURITY DEFINER + exact WHERE text; (2) exact API query; (3) execution chain; (4) list of bypass-vector occurrences (findings so far: none app-side; anon-key-only client; no RPC; no service creds; note `has_full_access(NULL)=true` is intentional); (5) root cause explanation — likely a divergence between the pre-existing 001 schema/`has_role`/policies and 009's assumptions.
+5. Do NOT modify any code.
+
+## Relevant Files
+- `/Users/mac/Desktop/Sensei-AI/supabase/migrations/001_initial_schema.sql` — NEW CRITICAL: ~600+ lines of real DDL incl. `has_role(uuid, app_role)` (line 450), grants (468), `workspaces` RLS policies (611-612); prime root-cause suspect.
+- `/Users/mac/Desktop/Sensei-AI/supabase/migrations/003_policy.sql` — two policies (`auth.uid() = id`, `auth.uid() = user_id`); read for completeness.
+- `/Users/mac/Desktop/Sensei-AI/supabase/migrations/009_workspace_visibility.sql` — idempotent Phase 7.2 migration (functions guarded by `to_regprocedure`; view WHERE at lines 195-196; verified applied per user).
+- `/Users/mac/Desktop/Sensei-AI/supabase/migrations/008_workspace_ownership.sql` — security-definer view + owner joins + aggregates (read truncated at ~line 35; full SELECT body still needed for exact SQL print).
+- `/Users/mac/Desktop/Sensei-AI/src/api/workspace.api.ts` — `getWorkspaces()` selects `"*"` from `workspace_with_owner`; `getWorkspaceBootstrap()` body unread.
+- `/Users/mac/Desktop/Sensei-AI/src/services/WorkspaceService.ts` — `bootstrap()` → `getWorkspaceBootstrap()`.
+- `/Users/mac/Desktop/Sensei-AI/src/contexts/WorkspaceContext.tsx` — provider query at lines 74-78 (`["workspace-bootstrap"]`, refetchOnWindowFocus) + sync-effect/refresh logic (already verified working).
+- `/Users/mac/Desktop/Sensei-AI/src/lib/supabase.ts` + `/Users/mac/Desktop/Sensei-AI/src/config/env.ts` + `/Users/mac/Desktop/Sensei-AI/.env.local` — single anon-key client; mock off; no service creds.
+- `/Users/mac/Desktop/Sensei-AI/PHASE7_VERIFY_VISIBILITY.txt` — target output file, NOT yet written.
+- `/Users/mac/Desktop/Sensei-AI/PHASE7_2_IMPLEMENTATION_RESULT.txt` — earlier phase result; irrelevant to the current verification except as documentation of prior state.
+
+---
+
+# PHASE 7.2 VISIBILITY VERIFICATION — MIGRATION 001 vs 009
+
+Status: **COMPLETE** — written after reading 001, 008, 009, 003, 002, 005, 006, 007,
+`workspace.api.ts`, `auth.api.ts`, `AuthService.ts`, `supabase.ts`, `env.ts`,
+`users.ts`, `docs/SUPABASE_INTEGRATION.md`. Static analysis only (no local Postgres).
+
+## 1. OLD `has_role()` (001_initial_schema.sql, already live) vs NEW `has_role()` (009)
+
+OLD (001, line 450 — `create or replace`, so it exists in the live DB):
+```sql
+create or replace function public.has_role(
+    _user_id uuid,
+    _role app_role
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select exists (
+        select 1
+        from public.user_roles
+        where user_id = _user_id
+          and role = _role
+    );
+$$;
+```
+
+NEW (009, line 70-87 — created ONLY if missing):
+```sql
+IF to_regprocedure('public.has_role(uuid, public.app_role)') IS NULL THEN
+    CREATE FUNCTION public.has_role(user_id uuid, required public.app_role)
+    RETURNS boolean
+    LANGUAGE sql
+    STABLE
+    SECURITY DEFINER
+    SET search_path = public
+    AS $fn$
+      SELECT EXISTS (
+        SELECT 1 FROM public.user_roles ur
+        WHERE ur.user_id = has_role.user_id
+          AND ur.role   = has_role.required
+      );
+    $fn$;
+END IF;
+```
+
+Verdict: the two bodies are **functionally identical** (both are
+`EXISTS(SELECT 1 FROM public.user_roles WHERE user_id = X AND role = Y)`).
+Because 001 already created `has_role`, 009's `to_regprocedure` guard resolves
+to a non-NULL OID and **009 silently skips creating its own version**. The OLD
+001 `has_role` remains the live definition. Function-overload resolution binds
+`public.has_role(...)` everywhere to that OLD function.
+
+## 2. `user_roles` table definitions + expected data
+
+001 (already live):
+```sql
+create table public.user_roles (
+    id      uuid primary key default gen_random_uuid(),
+    user_id uuid not null references public.profiles(id) on delete cascade,
+    role    app_role not null default 'student',
+    created_at timestamptz not null default now(),
+    unique (user_id, role)
+);
+```
+009 (never applied — `CREATE TABLE IF NOT EXISTS` is a no-op):
+```sql
+CREATE TABLE IF NOT EXISTS public.user_roles (
+  id      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
+  role    public.app_role NOT NULL,
+  UNIQUE (user_id, role)
+);
+```
+- Both keep the same uuid values (`profiles.id` = `auth.users.id`); only the FK
+  target and the `default 'student'` differ. The live table is 001's version.
+- Expected data per 001: `on_auth_user_created` → `handle_new_user()` creates a
+  profile; `on_profile_created` → `assign_default_role()` inserts exactly one
+  row `(user_id, 'student')`. A pure student therefore has NO `admin`/`reviewer`
+  row — `has_role(student,'admin')` and `has_role(student,'reviewer')` must be FALSE.
+
+## 3. Is `has_full_access()` calling the OLD `has_role()`?
+
+**YES.** 009's `has_full_access` (created, since it didn't exist) is:
+```sql
+CREATE FUNCTION public.has_full_access(uid uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $fn$
+  SELECT uid IS NULL
+      OR public.has_role(uid, 'admin')
+      OR public.has_role(uid, 'reviewer');
+$fn$;
+```
+Its `public.has_role(uid, 'admin'|'reviewer')` calls resolve to the **OLD 001
+`has_role`** (see §1 — the guard prevents 009's version from ever existing).
+Because old and new bodies are identical, the body itself is not a divergence —
+the divergence is that 009's new `has_role` is dead code, so Phase 7.2's gate is
+bound to whatever `has_role` the live DB already has.
+
+## 4. Exact view + API + execution chain (verified)
+
+View (009 lines 166-196, re-created via CREATE OR REPLACE):
+```sql
+CREATE OR REPLACE VIEW public.workspace_with_owner AS
+SELECT w.id, w.owner_id, w.name, ..., w.updated_at,
+       p.full_name AS owner_name, au.email AS owner_email,
+       (SELECT count(*) FROM public.documents d WHERE d.workspace_id = w.id) AS document_count,
+       (SELECT count(*) FROM public.generations g WHERE g.workspace_id = w.id) AS generation_count,
+       (SELECT count(*) FROM public.generations g WHERE g.workspace_id = w.id AND g.review_status = 'pending') AS pending_review_count,
+       COALESCE((SELECT g.review_status FROM public.generations g
+                 WHERE g.workspace_id = w.id ORDER BY g.created_at DESC, g.id DESC LIMIT 1), 'pending') AS review_status
+FROM public.workspaces w
+LEFT JOIN public.profiles p ON p.id = w.owner_id
+LEFT JOIN auth.users   au ON au.id = w.owner_id
+WHERE public.has_full_access((select auth.uid()))
+   OR w.owner_id = (select auth.uid());
+```
+- 008 header confirms the view is security-definer; PostgREST lints it but the
+  view's own WHERE is the gate (no leak via RLS-bypass).
+- API (`workspace.api.ts:79-82`):
+  `supabase.from("workspace_with_owner").select("*").order("created_at", { ascending: true })`.
+- Chain: `WorkspaceProvider` → `useServiceQuery(["workspace-bootstrap"], WorkspaceService.bootstrap, { refetchOnWindowFocus })`
+  → `WorkspaceService.bootstrap()` → `workspaceApi.getWorkspaceBootstrap()` → `getWorkspaces()` → view.
+- Bootstrap runs with the real student JWT (anon-key client, session attached),
+  so `auth.uid()` = student's uuid (NOT NULL) in the normal app flow.
+
+## 5. RLS bypass-vector scan
+
+- `src/lib/supabase.ts`: exactly one client, anon key only. No service_role key,
+  no `supabaseAdmin`, no `.rpc(` anywhere in `src/`. No app-side bypass exists.
+- Only matches for `service_role`/`SECURITY DEFINER` are inside the migration
+  SQL and `docs/SUPABASE_INTEGRATION.md:42` (`GRANT ALL ... TO service_role`).
+- `has_full_access(NULL) = TRUE` is intentional (service_role/SQL-editor/cron).
+  It only leaks if a request reaches the view with `auth.uid()` NULL.
+
+## 6. SINGLE ROOT CAUSE
+
+**`has_full_access()` is calling the OLD `has_role()` from 001 — 009's
+`to_regprocedure` guard skips installing its own `has_role`, so Phase 7.2's
+visibility gate is bound to the pre-existing OLD function and the live
+`user_roles` data it reads. In the live DB that OLD function + data resolves
+the "student" account as staff (`has_role(auth.uid(),'reviewer')` or
+`'admin'` = TRUE), so `has_full_access(auth.uid())` = TRUE, the view's
+`WHERE public.has_full_access((select auth.uid()))` passes for EVERY row, and
+the student sees every workspace.**
+
+Mechanism, precisely:
+1. 001 (base schema, already applied) defined `has_role` via `create or replace`.
+2. 009's detect-and-create guard (`to_regprocedure('public.has_role(uuid, public.app_role)')`)
+   finds it and does nothing — the NEW `has_role` never exists. (And, per §1,
+   even if it did, its body equals the old one, so 009 alone cannot change the
+   role result.)
+3. 009's `has_full_access` (which WAS created) calls that OLD `has_role`.
+4. For the student uid, the OLD `has_role` returns TRUE for `'reviewer'`/`'admin'`
+   (i.e. the live `user_roles` row set for that account includes a staff role),
+   so `has_full_access(student)` = TRUE.
+5. Every row of `workspace_with_owner` therefore satisfies
+   `has_full_access((select auth.uid()))` and the whole table is returned.
+
+The fix must make the live `has_role` (and `has_full_access`) be the exact,
+intended definitions REGARDLESS of what already exists — the current guard
+cannot, because it preserves the old function and old data verdict.
+
+## 7. SAFEST MIGRATION 010 (replace only what is necessary)
+
+CREATED on disk as `supabase/migrations/010_workspace_visibility_hard_fix.sql`
+(user approved "Create 010 + data cleanup SQL"). The SQL below is what the file
+contains; the data-cleanup DELETE ships commented-out at the end (requires the
+student's auth uid, which is unknown to this repo).
+
+Goal: force the intended `has_role`/`has_full_access` to be the live ones using
+`CREATE OR REPLACE` (non-destructive — no DROP, no dependency breakage; the
+view and policies keep their references), then re-assert the view + grants.
+Does NOT touch tables, enums, triggers, or any object created by 001/008/009.
+
+```sql
+-- 010_workspace_visibility_hard_fix.sql
+-- Phase 7.2 root-cause fix: 009's to_regprocedure guard skipped replacing the
+-- OLD has_role from 001, so has_full_access was bound to the old function and
+-- live user_roles data. CREATE OR REPLACE is non-destructive: it swaps the
+-- function body in place, keeps the same OID, and does not break the view or
+-- policies that reference these functions. Re-runnable / idempotent.
+
+CREATE OR REPLACE FUNCTION public.has_role(user_id uuid, required public.app_role)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles ur
+    WHERE ur.user_id = has_role.user_id
+      AND ur.role   = has_role.required
+  );
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.has_full_access(uid uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $fn$
+  SELECT uid IS NULL
+      OR public.has_role(uid, 'admin')
+      OR public.has_role(uid, 'reviewer');
+$fn$;
+
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.has_full_access(uuid) TO authenticated;
+
+-- Re-assert the gate (same shape as 009; CREATE OR REPLACE keeps it idempotent).
+CREATE OR REPLACE VIEW public.workspace_with_owner AS
+SELECT
+    w.id, w.owner_id, w.name, w.subject, w.description, w.accent,
+    w.created_at, w.updated_at,
+    p.full_name AS owner_name,
+    au.email    AS owner_email,
+    (SELECT count(*) FROM public.documents d WHERE d.workspace_id = w.id) AS document_count,
+    (SELECT count(*) FROM public.generations g WHERE g.workspace_id = w.id) AS generation_count,
+    (SELECT count(*) FROM public.generations g
+        WHERE g.workspace_id = w.id AND g.review_status = 'pending') AS pending_review_count,
+    COALESCE((
+        SELECT g.review_status
+        FROM public.generations g
+        WHERE g.workspace_id = w.id
+        ORDER BY g.created_at DESC, g.id DESC
+        LIMIT 1
+    ), 'pending') AS review_status
+FROM public.workspaces w
+LEFT JOIN public.profiles p ON p.id = w.owner_id
+LEFT JOIN auth.users   au ON au.id = w.owner_id
+WHERE public.has_full_access((select auth.uid()))
+   OR w.owner_id = (select auth.uid());
+
+COMMENT ON VIEW public.workspace_with_owner IS
+    'Workspaces joined with owner identity and review summary, filtered to the caller''s visibility (Phase 7.1 + 7.2).';
+
+GRANT SELECT ON public.workspace_with_owner TO authenticated;
+GRANT SELECT ON public.workspace_with_owner TO service_role;
+```
+
+Why this is safe / minimal:
+- `CREATE OR REPLACE FUNCTION` keeps the function OID → the view's and the RLS
+  policies' `public.has_role(...)` / `public.has_full_access(...)` references
+  remain valid (no `DROP ... CASCADE`, no re-grant churn on dependents).
+- It ONLY redefines the two helpers + re-asserts the view and grants. It does
+  not drop/recreate tables, the enum, triggers, or 001/008/009 objects.
+- It is idempotent and safe to run in the SQL editor repeatedly.
+- After 010, verify data too: the "student" account's `user_roles` rows must
+  contain ONLY `'student'`. If it currently holds `'reviewer'`/`'admin'`, delete
+  those rows (the OLD function merely reads whatever rows exist — 010 fixes the
+  function binding; the data fix removes the actual staff grant):
+  ```sql
+  DELETE FROM public.user_roles
+  WHERE user_id = <student_auth_uid> AND role IN ('reviewer','admin');
+  ```
+- Confirm with: `select uid, admin, reviewer from workspace_with_owner` after
+  signing in as the student — non-owned workspaces must disappear.

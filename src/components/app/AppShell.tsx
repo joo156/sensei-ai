@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Plus,
+  RefreshCw,
   Search,
   Settings,
   ShieldCheck,
@@ -42,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth, type Role } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { ReviewBadge } from "@/components/app/badges";
 import sprintsLogo from "@/assets/sprints-logo.png";
 
 type NavItem = {
@@ -224,7 +226,9 @@ function CreateWorkspaceDialog({
 }
 
 function WorkspaceSwitcher() {
-  const { workspaces, active, setActive } = useWorkspace();
+  const { workspaces, active, setActive, refreshWorkspaces } = useWorkspace();
+  const { user } = useAuth();
+  const isStudent = (user?.role ?? "student") === "student";
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -264,32 +268,66 @@ function WorkspaceSwitcher() {
             <ChevronsUpDown className="text-muted-foreground size-3.5 shrink-0" />
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 p-1.5">
-          <p className="text-muted-foreground px-2.5 py-1.5 text-[11px] font-semibold tracking-widest uppercase">
-            Workspaces · isolated docs, chats & assets
-          </p>
-          {workspaces.map((w) => (
+        <PopoverContent align="start" className="w-80 p-1.5">
+          <div className="flex items-center justify-between px-2.5 py-1.5">
+            <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+              Workspaces · isolated docs, chats & assets
+            </p>
             <button
-              key={w.id}
               onClick={() => {
-                setActive(w.id);
+                refreshWorkspaces();
                 setOpen(false);
-                toast.success(`Switched to ${w.name}`);
+                toast.success("Refreshing workspaces…");
               }}
-              className="hover:bg-muted flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left"
+              className="text-muted-foreground hover:text-foreground rounded p-1 transition-colors"
+              aria-label="Refresh workspaces"
             >
-              <span className="bg-muted text-foreground flex size-7 items-center justify-center rounded-lg text-[11px] font-bold">
-                {w.name.slice(0, 2).toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{w.name}</span>
-                <span className="text-muted-foreground block truncate text-[11px]">
-                  {w.subject}
-                </span>
-              </span>
-              {w.id === current.id && <Check className="text-primary size-4 shrink-0" />}
+              <RefreshCw className="size-3.5" />
             </button>
-          ))}
+          </div>
+          <div className="max-h-72 space-y-0.5 overflow-y-auto">
+            {workspaces.map((w) => (
+              <button
+                key={w.id}
+                onClick={() => {
+                  setActive(w.id);
+                  setOpen(false);
+                  toast.success(`Switched to ${w.name}`);
+                }}
+                className="hover:bg-muted flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left"
+              >
+                <span className="bg-muted text-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold">
+                  {w.name.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="block truncate text-sm font-medium">{w.name}</span>
+                    {w.id === current.id && <Check className="text-primary size-4 shrink-0" />}
+                  </span>
+                  <span
+                    className={cn(
+                      "block truncate text-[11px]",
+                      isStudent ? "text-muted-foreground/60" : "text-muted-foreground",
+                    )}
+                  >
+                    {w.owner.name || w.owner.email || "—"}
+                    {w.owner.email && w.owner.name ? ` · ${w.owner.email}` : ""}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-1 flex flex-wrap items-center gap-1.5",
+                      isStudent && "opacity-60",
+                    )}
+                  >
+                    <ReviewBadge state={w.reviewStatus} />
+                    <span className="text-muted-foreground text-[10px]">
+                      {w.pendingReview} pending · {w.generations} generations · {w.docs} docs
+                    </span>
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => {
               setOpen(false);

@@ -3,9 +3,10 @@ import { delay } from "./http";
 import { supabase } from "@/lib/supabase";
 import { isMockMode } from "@/config/env";
 import { workspaces as seedWorkspaces } from "@/mock/studio-data";
+import { mockAccounts } from "@/mock/users";
 import { emptyWorkspaceData, workspaceData as seedWorkspaceData } from "@/mock/workspace-data";
-import type { Workspace, WorkspaceAccent, WorkspaceData } from "@/types/domain";
-import type { DbWorkspace } from "@/types/database.types";
+import type { ReviewState, Workspace, WorkspaceAccent, WorkspaceData } from "@/types/domain";
+import type { DbWorkspace, DbWorkspaceWithOwner, ReviewStatus } from "@/types/database.types";
 import type {
   BootstrapWorkspacesResponse,
   CreateWorkspaceRequest,
@@ -17,13 +18,20 @@ import type {
 
 const ACCENTS: WorkspaceAccent[] = ["primary", "info", "success", "warning"];
 
+const REVIEW_STATES: Record<ReviewStatus, ReviewState> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  needs_edit: "Needs Edit",
+};
+
 /** Supabase error → plain Error with a safe fallback message. */
 function toError(error: { message?: string } | null | undefined, fallback: string): Error {
   return new Error(error?.message ?? fallback);
 }
 
-/** Map a stored workspace row to the UI shape, defaulting fields not in the DB yet. */
-function mapWorkspace(row: DbWorkspace): Workspace {
+/** Map a `workspace_with_owner` view row to the UI shape. */
+function mapWorkspace(row: DbWorkspaceWithOwner): Workspace {
   const accent = ACCENTS.includes(row.accent as WorkspaceAccent)
     ? (row.accent as WorkspaceAccent)
     : "primary";
@@ -32,11 +40,18 @@ function mapWorkspace(row: DbWorkspace): Workspace {
     name: row.name,
     subject: row.subject,
     description: row.description || undefined,
-    docs: 0,
+    docs: row.document_count,
     assets: 0,
-    pendingReview: 0,
+    pendingReview: row.pending_review_count,
+    generations: row.generation_count,
+    reviewStatus: REVIEW_STATES[row.review_status],
     lastActive: relativeTime(row.updated_at),
     accent,
+    owner: {
+      id: row.owner_id,
+      name: row.owner_name,
+      email: row.owner_email,
+    },
   };
 }
 
@@ -62,11 +77,11 @@ export async function getWorkspaces(): Promise<GetWorkspacesResponse> {
     return { workspaces: seedWorkspaces };
   }
   const { data, error } = await supabase
-    .from("workspaces")
+    .from("workspace_with_owner")
     .select("*")
     .order("created_at", { ascending: true });
   if (error) throw toError(error, "Could not load your workspaces.");
-  const rows = (data ?? []) as DbWorkspace[];
+  const rows = (data ?? []) as DbWorkspaceWithOwner[];
   return { workspaces: rows.map(mapWorkspace) };
 }
 
@@ -76,11 +91,15 @@ export async function getWorkspace(id: string): Promise<GetWorkspaceResponse> {
     const workspace = seedWorkspaces.find((w) => w.id === id) ?? seedWorkspaces[0];
     return { workspace, data: seedWorkspaceData[id] ?? emptyWorkspaceData() };
   }
-  const { data, error } = await supabase.from("workspaces").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await supabase
+    .from("workspace_with_owner")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
   if (error) throw toError(error, "Could not load the workspace.");
-  const row = data as DbWorkspace | null;
+  const row = data as DbWorkspaceWithOwner | null;
   if (!row) throw new Error("Workspace not found.");
-  return { workspace: mapWorkspace(row), data: seedWorkspaceData[id] ?? emptyWorkspaceData() };
+  return { workspace: mapWorkspace(row), data: emptyWorkspaceData() };
 }
 
 export function slugifyWorkspaceName(name: string): string {
@@ -97,6 +116,7 @@ export async function createWorkspace(
   if (isMockMode()) {
     await delay(80);
     const id = slugifyWorkspaceName(input.name) || `workspace-${Date.now()}`;
+    const owner = mockAccounts["student@demo.com"].user;
     const workspace: Workspace = {
       id,
       name: input.name.trim(),
@@ -105,8 +125,15 @@ export async function createWorkspace(
       docs: 0,
       assets: 0,
       pendingReview: 0,
+      generations: 0,
+      reviewStatus: "Pending",
       lastActive: "Just now",
       accent: "primary",
+      owner: {
+        id: owner.id,
+        name: owner.name,
+        email: owner.email,
+      },
     };
     return { workspace };
   }
@@ -129,7 +156,18 @@ export async function createWorkspace(
     .select("*")
     .single();
   if (error) throw toError(error, "Could not create the workspace.");
-  return { workspace: mapWorkspace(data as DbWorkspace) };
+  const row = data as DbWorkspace;
+  return {
+    workspace: mapWorkspace({
+      ...row,
+      owner_name: (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "",
+      owner_email: user.email ?? "",
+      document_count: 0,
+      generation_count: 0,
+      pending_review_count: 0,
+      review_status: "pending",
+    }),
+  };
 }
 
 export async function updateWorkspace({ id, patch }: UpdateWorkspaceRequest): Promise<void> {

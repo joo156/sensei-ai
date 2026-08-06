@@ -145,3 +145,244 @@ The design intent (survive reload of notes/chats/review history) is legitimate, 
 - **API/Service**: mock-mode mapping unchanged; verify Supabase path has no client-side filtering.
 - **E2E**: three accounts each see the correct list; dashboard-deleted workspace disappears on refresh; switching accounts shows no leakage.
 - Gate on `npx tsc --noEmit`, `npm run lint`, `npm run build`.
+
+---
+
+# Phase 7 — Implementation Plan: Supabase as Single Source of Truth for Workspaces
+
+## Architecture decisions
+
+1. **Supabase is the only source of truth.** `workspaces` rows are read/written only through `supabase` calls; mock seed data stops being merged into Supabase responses (`workspace.api.ts:83,163`).
+2. **localStorage persistence is removed.** The `cortexa.workspace.state` / `cortexa.workspace` keys (see `STORAGE_KEYS`, `src/constants/index.ts:44-49`) are deleted and the hydration/persist effects in `WorkspaceContext.tsx:116-147` are removed. A one-time cleanup effect deletes any legacy keys.
+3. **React Query owns all server state.** Two query keys: the workspace list and the active workspace's data. WorkspaceContext stops holding `workspaces`/`store` in `useState`.
+4. **WorkspaceContext becomes a UI-state + composition layer only.** It owns `activeId`, `selectedDocId`, dialog/flag state, and *composes* the React Query results so its public API surface (`workspaces`, `active`, `data`, all mutation helpers) stays unchanged — routes consume the same context, so most pages need zero edits.
+5. **Visibility (goals 6–9) is enforced in the database via RLS**, never client-side. Reviewer/Admin "see everything relevant" because the server returns exactly the visible rows.
+6. **Owner labels (goal 10) require owner name + email**, which the anon client cannot read from `auth.users`. Requires a small schema addition (see "Supabase query flow").
+7. **Query keys are namespaced by `user.id`** so switching accounts never serves stale cached workspaces.
+
+---
+
+## Files that will change
+
+| File | What changes |
+|---|---|
+| `src/contexts/WorkspaceContext.tsx` | Major rewrite — remove server state & persistence; keep UI state; compose React Query hooks; expose mutations over the query cache. |
+| `src/api/workspace.api.ts` | Remove `getWorkspaceBootstrap`; remove mock-seed data leak; read owner name/email; map owner fields. |
+| `src/services/WorkspaceService.ts` | Remove `bootstrap()`. |
+| `src/types/api/workspace.contracts.ts` | Remove `BootstrapWorkspacesResponse`. |
+| `src/types/domain.ts` | Add owner fields to `Workspace` (`ownerId`, `ownerName`, `ownerEmail`). |
+| `src/types/database.types.ts` | Add the owner-info view row shape (and/or `owner_email` on `DbProfile`). |
+| `src/components/app/AppShell.tsx` | Extract `WorkspaceSwitcher`; switch create-dialog open state to context; `CreateWorkspaceDialog` keeps calling `addWorkspace`. |
+| `src/routes/workspace.tsx` | Replace local `docId`/`chunkId`/`query` `useState` with context-selected-document state (goal 4). |
+| `src/routes/__root.tsx` | No structural change required (provider stays mounted). |
+| `src/lib/supabase.ts` | No change (single client). |
+| `supabase/migrations/<ts>_multi_user_workspaces.sql` (new) | View + helper functions + RLS + GRANTs. |
+| `src/components/app/WorkspaceSwitcher.tsx` (new) | Extracted switcher with owner name/email display. |
+| `src/hooks/useWorkspaceQueries.ts` (new) | The React Query hooks (or they live inside the context file — recommended: separate file). |
+
+---
+
+## Functions that will change
+
+**`src/contexts/WorkspaceContext.tsx`**
+- `WorkspaceProvider` (70–100) → no longer fetches; becomes the mount point that renders the query-gated store.
+- `WorkspaceStore` (102–253) → rewritten: `useState` only for `activeId` (init from `workspaces[0]?.id ?? null`, no localStorage); mutations become `queryClient.setQueryData` writers.
+- `WorkspaceCtx` interface (36–58) → add `selectedDocId`, `setSelectedDocId`, dialog open-state setters; keep `workspaces`, `active`, `data`, and all mutation signatures for backward compatibility.
+- `setActive` (149–155) → unchanged logic (ignore unknown ids; now validates against the query list).
+
+**`src/api/workspace.api.ts`**
+- `mapWorkspace` (26–41) → also map `ownerId`, `ownerName`, `ownerEmail` from the owner-info row/view.
+- `getWorkspaces` (59–71) → select from the owner-info source; still `.order("created_at")`; RLS filters rows; no client-side role filtering.
+- `getWorkspace` (73–84) → same owner-info source; drop `seedWorkspaceData[id]` fallback (line 83) → `emptyWorkspaceData()`.
+- `createWorkspace` (94–133) → unchanged except response now includes owner fields (owner = current user).
+- `updateWorkspace` (135–145) → unchanged.
+- `getWorkspaceData` (147–150) → kept; drives the per-workspace data query.
+
+**`src/services/WorkspaceService.ts`**
+- Remove `bootstrap` (10–12); everything else unchanged.
+
+**`src/components/app/AppShell.tsx`**
+- `WorkspaceSwitcher` (226–308) → moved to its own file; non-owned entries show owner name + email.
+- `CreateWorkspaceDialog` (157–224) → reads open state from context; `create()` still calls `addWorkspace` (now a React Query mutation).
+- `SidebarBody` (322–336) → unchanged (imports the extracted switcher).
+
+---
+
+## Functions that will be deleted
+
+| Location | Deleted |
+|---|---|
+| `WorkspaceContext.tsx:27-28` | `STORAGE_KEY` / `STATE_KEY` constants |
+| `WorkspaceContext.tsx:30-34` | `PersistShape` interface |
+| `WorkspaceContext.tsx:114` | `hydrated` ref |
+| `WorkspaceContext.tsx:116-147` | hydration + persistence effects |
+| `WorkspaceContext.tsx:157-161` | `mutate` (setStore-based) |
+| `WorkspaceContext.tsx:111-113` | `workspaces` / `store` `useState` |
+| `WorkspaceService.ts:10-12` | `WorkspaceService.bootstrap()` |
+| `workspace.api.ts:153-165` | `getWorkspaceBootstrap()` |
+| `workspace.contracts.ts:27-31` | `BootstrapWorkspacesResponse` |
+| `workspace.api.ts` imports | `seedWorkspaces` / `seedWorkspaceData` no longer referenced in Supabase paths |
+
+---
+
+## New hooks needed (in `src/hooks/useWorkspaceQueries.ts`, composed by the context)
+
+- `useWorkspaces()` → `useServiceQuery(["workspaces", user.id], () => WorkspaceService.listWorkspaces())`. Canonical list query; enabled when signed in. Used by the provider gate.
+- `useWorkspaceData(activeId: string | null)` → `useServiceQuery(["workspaces", user.id, activeId, "data"], () => WorkspaceService.getWorkspaceData(activeId), { enabled: activeId != null })`. Returns `WorkspaceData` (fallback `emptyWorkspaceData()` while loading/disabled).
+- `useCreateWorkspace()` → `useMutation` on `WorkspaceService.createWorkspace`; `onSuccess`: append the returned workspace to the list cache via `setQueryData` and set it active (which auto-triggers its data query).
+- `useWorkspaceMutations(activeId)` → returns `addDoc`, `updateDoc`, `removeDoc`, `setReview`, `addAudit`, `addChat`, `appendChatMessage`, `addHistory`, each writing through `queryClient.setQueryData(["workspaces", user.id, activeId, "data"], reducer)`. When real child-table endpoints land, each swaps to a backend call + `invalidateQueries`; the signatures exposed to pages stay identical.
+
+---
+
+## React Query flow
+
+```
+QueryClientProvider (router.tsx)                       owns the cache
+  → AuthProvider                                       session from Supabase
+    → WorkspaceProvider                                 (mount only)
+      → WorkspaceGate      useServiceQuery(["workspaces", user.id])   → pending/error full-screen states (as today)
+        → WorkspaceStore   useState(activeId)  ← UI state only, init workspaces[0]?.id ?? null, NO localStorage
+          → WorkspaceData  useServiceQuery(["workspaces", user.id, activeId, "data"], enabled when activeId != null)
+            → Ctx.Provider value = { workspaces, active, data, activeId, setActive,
+                                     selectedDocId, setSelectedDocId, dialogs,
+                                     addWorkspace, addDoc, … }          → Outlet
+```
+
+- **Query keys** are `user.id`-scoped → signing out/in as another account refetches fresh; no cross-user cache bleed.
+- **Server state lives only in the cache.** No `useState` mirrors of `workspaces`/`store`.
+- **Mutations** update the cache directly (create appends to the list + activates; data mutations reduce the active data key). Deleted-on-server workspaces disappear because the list is only ever the query result — no localStorage snapshot can resurrect them.
+- **Switch workspace** = `setActive(id)` → the data query for the new id runs; pages see fresh `data` with the existing loading/empty handling.
+
+---
+
+## Supabase query flow
+
+- **List / bootstrap replacement** — `getWorkspaces()` selects workspace rows *including owner info*; RLS returns exactly the visible set (goal 6–9: student → own; reviewer → own + student-owned; admin → all). No client filtering, per `AGENTS.md`.
+- **Owner name + email (goal 10)** — email is not readable from `auth.users` by the anon key, so the minimum schema change is an owner-info **view** (SECURITY DEFINER) joining `workspaces` + `profiles.full_name` + `auth.users.email`, with a visibility `WHERE` using the same `has_role(uuid, app_role)` helper. Alternative: denormalize `owner_email` onto `profiles` via trigger. The API maps `ownerId`, `ownerName`, `ownerEmail`; the switcher renders them only for non-owned rows (`w.ownerId !== user.id`).
+- **Single workspace** — `getWorkspace(id)` selects from the owner-info view; a non-visible id returns null → "Workspace not found".
+- **Create** — `insert({ owner_id: user.id, … })` under the RLS insert policy (`WITH CHECK owner_id = auth.uid()`); response includes owner fields.
+- **Update** — `.update(...)` under the owner-or-admin RLS policy.
+- **RLS** (from the earlier review): `has_role()` SECURITY DEFINER function; SELECT policy = visibility matrix; INSERT = owner check; UPDATE/DELETE = owner or admin; GRANTs to `authenticated`; `user_roles` SELECT scoped to own rows.
+
+---
+
+## Testing
+
+- `npx tsc --noEmit`, `npm run lint`, `npm run build` after implementation.
+- **Context regression test** — feed a fresh server list *without* a previously deleted workspace; assert it is gone (no localStorage restore path anymore) and `activeId` falls back.
+- **Query-cache test** — `user.id` namespacing: switching accounts yields a fresh list, no stale rows.
+- **Switcher test** — owned vs non-owned rows; owner name/email render only for non-owned.
+- **RLS SQL matrix test** — student A, student B, reviewer, admin each receive exactly their expected workspace id sets.
+- **Manual E2E** — delete a workspace in the Supabase dashboard → refresh → gone; reviewer sees own + students; admin sees all; account switch shows no leakage.
+
+---
+
+This plan requires no changes to `src/lib/supabase.ts`, `src/routes/__root.tsx` (provider stays mounted), or any page's consumption of `workspaces`/`active`/`data`/mutations (compat surface preserved) — the only page edit is `workspace.tsx` adopting the context-managed selected document.
+
+---
+
+# Phase 7 (Revised) — Implementation Plan
+
+## Incorporated adjustments
+
+1. `WorkspaceService.bootstrap()` is **kept**; it now returns only the workspace list from Supabase (no `store`).
+2. `BootstrapWorkspacesResponse` is **kept**, reduced to `{ workspaces: Workspace[] }`.
+3. `src/routes/workspace.tsx` is **not modified** — document selection is deferred to a later migration.
+4. Flat `ownerId`/`ownerName`/`ownerEmail` is replaced by a single **`owner: { id, name, email }`** object everywhere.
+5. Workspace Switcher is **role-aware**: student sees only the workspace name; reviewer/admin see a stacked layout of Workspace Name / Owner Name / Owner Email.
+6. Reviewer workflow: every workspace row exposes `owner`, `reviewStatus`, `pendingReview` (pending count), `docs` (document count), `generations` (generation count).
+7. Delivery is **incremental**, in order: 7.1 ownership → 7.2 RLS → 7.3 switcher → 7.4 React Query → 7.5 localStorage removal → 7.6 CRUD.
+
+---
+
+## Phase 7.1 — Workspace ownership
+
+**Database** — new `supabase/migrations/<ts>_workspace_ownership.sql`:
+- `app_role` enum + `has_role(uuid, app_role)` SECURITY DEFINER function (foundation for 7.2).
+- SECURITY DEFINER view `workspace_with_owner` joining `workspaces` + `profiles.full_name` + `auth.users.email`, plus computed `document_count`, `generation_count`, `pending_review_count`, `review_status` (derived from the workspace's generations). GRANT SELECT to `authenticated`. (Visibility `WHERE` is added in 7.2.)
+- `src/types/database.types.ts`: add `DbWorkspaceWithOwner` view-row shape.
+
+**API** — `src/api/workspace.api.ts`:
+- `getWorkspaceBootstrap()` → returns `{ workspaces }` only; Supabase path delegates to `getWorkspaces()`.
+- `getWorkspaces()` → selects from the view, `.order("created_at")`, no mock-seed merge.
+- `getWorkspace(id)` → selects from the view; drop `seedWorkspaceData[id]` fallback.
+- `mapWorkspace(row)` → maps `owner: { id, name, email }`, `generations`, `reviewStatus` (plus existing `docs`, `pendingReview`).
+
+**Service** — `src/services/WorkspaceService.ts`:
+- `bootstrap()` kept, now returns only the list.
+- Delete redundant `listWorkspaces()` (superseded by `bootstrap`).
+
+**Contracts** — `src/types/api/workspace.contracts.ts`:
+- `BootstrapWorkspacesResponse` → `{ workspaces: Workspace[] }`.
+
+**Domain** — `src/types/domain.ts`:
+- `Workspace` gains `owner: { id: string; name: string; email: string }`, `generations: number`, `reviewStatus`.
+
+**Mock** — `src/mock/studio-data.ts`:
+- Seed workspaces gain `owner` (demo user) and `generations`/`reviewStatus` so mock mode matches the new shape.
+
+---
+
+## Phase 7.2 — Visibility (RLS)
+
+**Database** — new `supabase/migrations/<ts>_workspace_visibility.sql`:
+- Enable RLS on `workspaces`; GRANTs (`SELECT,INSERT,UPDATE,DELETE` to `authenticated`, `ALL` to `service_role`).
+- SELECT policy = visibility matrix (student → own; reviewer → own + student-owned; admin → all), INSERT `WITH CHECK owner_id = auth.uid()`, UPDATE/DELETE owner-or-admin.
+- Rewrite `workspace_with_owner` to add the same visibility `WHERE` (required because it is SECURITY DEFINER).
+- Scope `user_roles` SELECT to `user_id = auth.uid()`.
+
+**App code**: none — RLS is the sole filter. Verify no client-side role filtering exists (`AGENTS.md`).
+**Testing**: RLS matrix SQL test across student A / student B / reviewer / admin.
+
+---
+
+## Phase 7.3 — Workspace Switcher
+
+- Extract `WorkspaceSwitcher` (`AppShell.tsx:226-308`) → new `src/components/app/WorkspaceSwitcher.tsx`.
+- Role-aware rendering via `useAuth().user.role`:
+  - **Student**: workspace name only (current look).
+  - **Reviewer / Admin**: stacked card — Workspace Name, Owner Name, Owner Email; plus attention indicators for the reviewer workflow (`reviewStatus` badge, `pendingReview` count).
+- Owned check: `w.owner.id === user.id`.
+- `CreateWorkspaceDialog` stays in `AppShell.tsx`, unchanged; still calls `addWorkspace` from context.
+
+---
+
+## Phase 7.4 — React Query migration
+
+**Context** — `src/contexts/WorkspaceContext.tsx` rewritten as a composition layer:
+- `WorkspaceProvider` → `WorkspaceGate` (`useServiceQuery(["workspaces", user.id], () => WorkspaceService.bootstrap())`, existing pending/error screens) → `WorkspaceStore` (`useState(activeId)` from `workspaces[0]?.id ?? null`, no server state) → data bridge (`useServiceQuery(["workspaces", user.id, activeId, "data"], enabled: activeId != null)`) → `Ctx.Provider`.
+- Context UI state = `activeId` + create-dialog open flag; **no document selection** (deferred). Public surface for pages stays identical (`workspaces`, `active`, `data`, `setActive`, `addWorkspace`, `addDoc`, `updateDoc`, `removeDoc`, `setReview`, `addAudit`, `addChat`, `appendChatMessage`, `addHistory`).
+
+**New hooks** — `src/hooks/useWorkspaceQueries.ts`:
+- `useWorkspaces` (list via bootstrap), `useWorkspaceData(activeId)`, `useCreateWorkspace` (mutation: append to list cache + activate), `useWorkspaceMutations(activeId)` (write through `queryClient.setQueryData` on the data key).
+- Query keys namespaced by `user.id`.
+
+**Untouched**: `workspace.tsx`, all other routes, `AppShell` consumers (compat surface).
+
+---
+
+## Phase 7.5 — Remove localStorage
+
+- Delete `PersistShape`, `STORAGE_KEY`/`STATE_KEY`, hydration + persistence effects, `hydrated` ref (`WorkspaceContext.tsx:27-34,114-147`).
+- One-time cleanup effect purges legacy keys `cortexa.workspace` / `cortexa.workspace.state`.
+- Remove `workspaceActive` / `workspaceState` from `STORAGE_KEYS` (`src/constants/index.ts:44-49`).
+- Regression test: deleted workspace can no longer be resurrected; `activeId` derives only from the server list.
+
+---
+
+## Phase 7.6 — Workspace CRUD
+
+- **Create**: `addWorkspace` backed by `useCreateWorkspace`; success appends to the list cache and activates the new id.
+- **Update**: wire `WorkspaceService.updateWorkspace` to a mutation + cache update; optional rename UI (owner/admin).
+- **Delete**: add `deleteWorkspace(id)` to api + service + mutation; RLS owner/admin; invalidate `["workspaces", user.id]`; optional delete action in the switcher for owner/admin.
+- Child-table data migration (documents/generations/…) remains **out of scope** for Phase 7 — `getWorkspaceData` stays mock/empty-backed and is a documented follow-up.
+
+---
+
+## Cross-cutting
+
+- **React Query flow**: `QueryClientProvider → AuthProvider → WorkspaceProvider (mount) → WorkspaceGate → WorkspaceStore (activeId) → Data bridge → Ctx.Provider → Outlet`. Server state lives only in the cache; mutations reduce the cache; query keys include `user.id`.
+- **Supabase query flow**: list/get read `workspace_with_owner` (owner + counts, RLS-filtered); create inserts `owner_id = auth.uid()`; update/delete under owner-or-admin policy.
+- **Files created**: 2 migrations, `WorkspaceSwitcher.tsx`, `useWorkspaceQueries.ts`.
+- **Functions deleted**: `listWorkspaces()`, `BootstrapWorkspacesResponse.store` (type reduced, not removed).
+- **Verification**: `npx tsc --noEmit`, `npm run lint`, `npm run build` after each phase; RLS matrix test; context regression test; switcher layout test.
