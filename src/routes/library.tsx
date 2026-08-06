@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { RoleGate } from "@/components/app/RoleGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,7 +41,11 @@ export const Route = createFileRoute("/library")({
       },
     ],
   }),
-  component: Library,
+  component: () => (
+    <RoleGate allow={["student", "reviewer", "admin"]}>
+      <Library />
+    </RoleGate>
+  ),
 });
 
 const kindIcon = {

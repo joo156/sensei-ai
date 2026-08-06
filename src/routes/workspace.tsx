@@ -14,6 +14,7 @@ import {
   Tag,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { RoleGate } from "@/components/app/RoleGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,7 +40,11 @@ export const Route = createFileRoute("/workspace")({
       },
     ],
   }),
-  component: WorkspacePage,
+  component: () => (
+    <RoleGate allow={["student", "reviewer", "admin"]}>
+      <WorkspacePage />
+    </RoleGate>
+  ),
 });
 
 function WorkspacePage() {

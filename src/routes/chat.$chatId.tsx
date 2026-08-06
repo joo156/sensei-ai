@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { MessagesSquare } from "lucide-react";
+import { RoleGate } from "@/components/app/RoleGate";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,11 @@ export const Route = createFileRoute("/chat/$chatId")({
       { property: "og:description", content: "Read back a saved mentor or concept conversation." },
     ],
   }),
-  component: ChatPage,
+  component: () => (
+    <RoleGate allow={["student", "reviewer", "admin"]}>
+      <ChatPage />
+    </RoleGate>
+  ),
 });
 
 function ChatPage() {

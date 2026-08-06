@@ -1,63 +1,153 @@
-/** Auth endpoints. Mock-backed today, Supabase Auth / FastAPI tomorrow. */
-import { delay, http } from "./http";
-import { isMockMode } from "@/config/env";
-import { mockAccounts, mockDemoAccounts } from "@/mock/users";
+/**
+ * Auth endpoints backed by Supabase Auth.
+ *
+ * These replace the old mock/FastAPI stubs. Every call flows through the
+ * shared Supabase client in `src/lib/supabase.ts` — the only Supabase client
+ * in the application. Supabase errors are converted to plain `Error`s here.
+ */
+import { supabase } from "@/lib/supabase";
+import type { Session as SupabaseSession, User as SupabaseUser } from "@supabase/supabase-js";
 import type {
+  AuthUser,
   GetCurrentUserResponse,
   LoginRequest,
   LoginResponse,
   RefreshSessionResponse,
   Session,
 } from "@/types/api/auth.contracts";
+import type { DbProfile, DbUserRole } from "@/types/database.types";
 
-function mockSession(user: Session["user"]): Session {
-  return {
-    access_token: `mock-access-${user.id}`,
-    refresh_token: `mock-refresh-${user.id}`,
-    expires_at: Date.now() + 60 * 60 * 1000,
+/** Convert a Supabase error into a normal Error with a sane fallback message. */
+function toError(error: { message?: string } | null | undefined, fallback: string): Error {
+  return new Error(error?.message ?? fallback);
+}
+
+/** Best-effort initials (e.g. "Amira Rahman" → "AR"). */
+function initialsFor(name: string): string {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return initials || "?";
+}
+
+/**
+ * Merge a Supabase auth user with its `profiles` and `user_roles` rows into
+ * the app's `AuthUser` shape. Falls back to safe defaults when the user has
+ * no profile/role rows yet.
+ */
+async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
+  const profileRes = await supabase
+    .from("profiles")
+    .select("full_name, initials")
+    .eq("id", authUser.id)
+    .limit(1)
+    .maybeSingle();
+  // TEMP-DEBUG: trace profile lookup
+  console.log("[mergeUser] authUser.id =", authUser.id);
+  console.log("[mergeUser] profileRes =", profileRes);
+  if (profileRes.error) throw toError(profileRes.error, "Could not load the user profile.");
+  const profile = profileRes.data as DbProfile | null;
+
+  const roleRes = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", authUser.id)
+    .limit(1)
+    .maybeSingle();
+  // TEMP-DEBUG: trace role lookup
+  console.log("[mergeUser] roleRes =", roleRes);
+  if (roleRes.error) throw toError(roleRes.error, "Could not load the user role.");
+  const roleRow = roleRes.data as DbUserRole | null;
+  console.log("[mergeUser] roleRow =", roleRow, "| role value =", roleRow?.role);
+
+  const name =
+    profile?.full_name || authUser.user_metadata?.name || authUser.email?.split("@")[0] || "User";
+
+  const merged: AuthUser = {
+    id: authUser.id,
+    email: authUser.email ?? "",
+    name,
+    initials: profile?.initials || initialsFor(name),
+    role: roleRow?.role ?? "student",
+  };
+  // TEMP-DEBUG: trace final merged user
+  console.log("[mergeUser] FINAL merged user =", merged);
+  return merged;
+}
+
+/** Map a Supabase session into the app's Session shape, merging user data. */
+export async function mapSession(supabaseSession: SupabaseSession | null): Promise<Session | null> {
+  if (!supabaseSession?.access_token || !supabaseSession.user) return null;
+  const user = await mergeUser(supabaseSession.user);
+  const session: Session = {
+    access_token: supabaseSession.access_token,
+    refresh_token: supabaseSession.refresh_token,
+    expires_at: supabaseSession.expires_at ?? Date.now(),
     user,
   };
+  // TEMP-DEBUG: trace final session built from Supabase session
+  console.log("[mapSession] FINAL session =", session);
+  return session;
 }
 
+/** Sign in with email + password and return the mapped session. */
 export async function login({ email, password }: LoginRequest): Promise<LoginResponse> {
-  if (!isMockMode()) return http.post<LoginResponse>("/auth/login", { email, password });
-  await delay(120);
-  const rec = mockAccounts[email.trim().toLowerCase()];
-  if (!rec || rec.password !== password) {
-    throw new Error("Wrong email or password. Try one of the demo accounts.");
-  }
-  return { session: mockSession(rec.user) };
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  // TEMP-DEBUG: trace authenticated user from Supabase
+  console.log("[login] signInWithPassword data =", data, "| error =", error);
+  if (error) throw toError(error, "Wrong email or password.");
+  const session = await mapSession(data.session);
+  if (!session) throw new Error("Sign-in succeeded but no session was returned.");
+  return { session };
 }
 
+/** Sign the current user out. */
 export async function logout(): Promise<void> {
-  if (!isMockMode()) {
-    await http.post<void>("/auth/logout");
-    return;
-  }
-  await delay(60);
+  const { error } = await supabase.auth.signOut();
+  if (error) throw toError(error, "Could not sign out.");
 }
 
-export async function getCurrentUser(session?: Session | null): Promise<GetCurrentUserResponse> {
-  if (!isMockMode()) return http.get<GetCurrentUserResponse>("/auth/me");
-  await delay(40);
-  return { user: session?.user ?? null };
-}
-
+/** Refresh the session using the given session's refresh token. */
 export async function refreshSession(session: Session): Promise<RefreshSessionResponse> {
-  if (!isMockMode()) {
-    return http.post<RefreshSessionResponse>("/auth/refresh", {
-      refresh_token: session.refresh_token,
-    });
-  }
-  await delay(40);
-  return { session: mockSession(session.user) };
+  const { data, error } = await supabase.auth.refreshSession({
+    refresh_token: session.refresh_token,
+  });
+  if (error) throw toError(error, "Could not refresh the session.");
+  const next = await mapSession(data.session);
+  if (!next) throw new Error("Session refresh returned no session.");
+  return { session: next };
 }
 
-export async function listDemoAccounts() {
-  return mockDemoAccounts;
+/**
+ * Load the current user from Supabase, merging `profiles` and `user_roles`
+ * into the `AuthUser` shape. Returns `{ user: null }` when signed out.
+ */
+export async function getCurrentUser(session?: Session | null): Promise<GetCurrentUserResponse> {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw toError(error, "Could not load the current user.");
+  const user = data.user ? await mergeUser(data.user) : null;
+  return { user };
 }
 
-/** Demo credentials shown on the login screen (mock mode only). */
-export function demoAccounts() {
-  return isMockMode() ? mockDemoAccounts : [];
+/** Shape of the demo credentials formerly shown on the login screen. */
+export interface DemoAccount {
+  email: string;
+  password: string;
+  role: string;
+  name: string;
+}
+
+/** Demo accounts are no longer available with Supabase auth. */
+export async function listDemoAccounts(): Promise<DemoAccount[]> {
+  return [];
+}
+
+/** Demo credentials shown on the login screen (Supabase mode: none). */
+export function demoAccounts(): DemoAccount[] {
+  return [];
 }

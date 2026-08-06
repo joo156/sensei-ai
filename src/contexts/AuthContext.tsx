@@ -59,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const next = await AuthService.login(email, password);
+    // TEMP-DEBUG: trace what AuthContext stores in state
+    console.log("[AuthContext.login] storing session =", next, "| role =", next.user.role);
     setSession(next);
     return next.user;
   }, []);

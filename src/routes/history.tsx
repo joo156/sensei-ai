@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Download, ExternalLink, MessagesSquare } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { RoleGate } from "@/components/app/RoleGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ReviewBadge, NeutralBadge } from "@/components/app/badges";
@@ -23,7 +24,11 @@ export const Route = createFileRoute("/history")({
       { property: "og:description", content: "The full activity trail of this workspace." },
     ],
   }),
-  component: HistoryPage,
+  component: () => (
+    <RoleGate allow={["student", "reviewer", "admin"]}>
+      <HistoryPage />
+    </RoleGate>
+  ),
 });
 
 const statusTone: Record<string, string> = {
