@@ -60,10 +60,12 @@ export function GlobalSearch({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
 
+  // Search is scoped to the active workspace; without one there is nothing to search.
+  const workspaceId = active ? active.id : "";
   const { data, isPending, isError, error } = useServiceQuery(
-    ["search", active.id, debounced],
-    () => SearchService.search({ q: debounced, workspaceId: active.id }),
-    { enabled: open, staleTime: 30_000 },
+    ["search", workspaceId, debounced],
+    () => SearchService.search({ q: debounced, workspaceId }),
+    { enabled: open && active != null, staleTime: 30_000 },
   );
 
   const go = (to: string) => {
