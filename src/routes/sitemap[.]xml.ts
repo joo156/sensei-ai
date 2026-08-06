@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type {} from "@tanstack/react-start";
 
-// TODO: replace with your project URL once a project name or custom domain is set.
+// Public origin used to build absolute sitemap URLs (empty while the app runs
+// on a local host / before a custom domain is set).
 const BASE_URL = "";
 
 interface SitemapEntry {

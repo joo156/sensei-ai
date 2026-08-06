@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { QuestionCard } from "@/components/app/QuestionCard";
-import { EmptyState } from "@/components/app/AsyncState";
+import { EmptyState, NoActiveWorkspace } from "@/components/app/AsyncState";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ContentService, GenerationService, HistoryService } from "@/services";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -77,9 +77,12 @@ function Generate() {
   const documents = catalogue.data?.documents ?? [];
   const selectedDoc = doc || documents[0]?.id || "";
 
+  // Generation is scoped to the active workspace; the page gates on it before running.
+  const workspaceId = active ? active.id : "";
+
   /** Exactly the payload the FastAPI question-bank endpoint expects. */
   const buildRequest = (): GenerateQuestionsRequest => ({
-    workspaceId: active.id,
+    workspaceId,
     documentIds: selectedDoc ? [selectedDoc] : [],
     model: MODELS[0].id,
     count: count[0],
@@ -88,6 +91,7 @@ function Generate() {
   });
 
   const run = async () => {
+    if (!active) return;
     if (!selectedDoc) {
       notify.warning("Pick a source document first");
       return;
@@ -132,164 +136,171 @@ function Generate() {
         </Button>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-        <aside className="surface-card h-fit p-6 lg:sticky lg:top-24">
-          <h2 className="text-base font-semibold">Configuration</h2>
+      {!active ? (
+        <NoActiveWorkspace />
+      ) : (
+        <>
+          <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+            <aside className="surface-card h-fit p-6 lg:sticky lg:top-24">
+              <h2 className="text-base font-semibold">Configuration</h2>
 
-          <div className="mt-5 space-y-5">
-            <div>
-              <Label className="text-xs tracking-wide uppercase">Question type</Label>
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                {types.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setType(t)}
-                    className={cn(
-                      "rounded-xl border px-2 py-2 text-xs font-medium transition-colors",
-                      type === t
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
+              <div className="mt-5 space-y-5">
+                <div>
+                  <Label className="text-xs tracking-wide uppercase">Question type</Label>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {types.map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setType(t)}
+                        className={cn(
+                          "rounded-xl border px-2 py-2 text-xs font-medium transition-colors",
+                          type === t
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40",
+                        )}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div>
-              <Label className="text-xs tracking-wide uppercase">Difficulty</Label>
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
-                {levels.map((l) => (
-                  <button
-                    key={l}
-                    onClick={() => setLevel(l)}
-                    className={cn(
-                      "rounded-xl border px-2 py-2 text-xs font-medium transition-colors",
-                      level === l
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div>
+                  <Label className="text-xs tracking-wide uppercase">Difficulty</Label>
+                  <div className="mt-2 grid grid-cols-3 gap-1.5">
+                    {levels.map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => setLevel(l)}
+                        className={cn(
+                          "rounded-xl border px-2 py-2 text-xs font-medium transition-colors",
+                          level === l
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/40",
+                        )}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs tracking-wide uppercase">Question count</Label>
-                <span className="text-primary text-sm font-semibold">{count[0]}</span>
-              </div>
-              <Slider
-                className="mt-3"
-                value={count}
-                onValueChange={setCount}
-                min={4}
-                max={40}
-                step={2}
-              />
-            </div>
-
-            <div>
-              <Label className="text-xs tracking-wide uppercase">Source document</Label>
-              <Select
-                value={selectedDoc}
-                onValueChange={setDoc}
-                disabled={catalogue.isPending || documents.length === 0}
-              >
-                <SelectTrigger className="mt-2 w-full">
-                  <SelectValue
-                    placeholder={
-                      catalogue.isPending
-                        ? "Loading documents…"
-                        : documents.length === 0
-                          ? "No documents available"
-                          : "Select a document"
-                    }
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs tracking-wide uppercase">Question count</Label>
+                    <span className="text-primary text-sm font-semibold">{count[0]}</span>
+                  </div>
+                  <Slider
+                    className="mt-3"
+                    value={count}
+                    onValueChange={setCount}
+                    min={4}
+                    max={40}
+                    step={2}
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {documents.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {catalogue.error && (
-                <p role="alert" className="text-destructive mt-2 text-xs">
-                  Unable to load documents. {catalogue.error.message}
+                </div>
+
+                <div>
+                  <Label className="text-xs tracking-wide uppercase">Source document</Label>
+                  <Select
+                    value={selectedDoc}
+                    onValueChange={setDoc}
+                    disabled={catalogue.isPending || documents.length === 0}
+                  >
+                    <SelectTrigger className="mt-2 w-full">
+                      <SelectValue
+                        placeholder={
+                          catalogue.isPending
+                            ? "Loading documents…"
+                            : documents.length === 0
+                              ? "No documents available"
+                              : "Select a document"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {documents.map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {catalogue.error && (
+                    <p role="alert" className="text-destructive mt-2 text-xs">
+                      Unable to load documents. {catalogue.error.message}
+                    </p>
+                  )}
+                </div>
+
+                <Button className="w-full" onClick={() => void run()} disabled={running}>
+                  <Wand2 className="size-4" />
+                  {running ? "Generating…" : "Generate questions"}
+                </Button>
+              </div>
+
+              <div className="mt-6 border-t pt-5">
+                <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+                  Quality analysis
                 </p>
+                <dl className="mt-3 space-y-2">
+                  {metrics.map((m) => (
+                    <div key={m.label} className="flex items-center justify-between text-sm">
+                      <dt className="text-muted-foreground">{m.label}</dt>
+                      <dd className={cn("font-medium", m.tone)}>{m.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </aside>
+
+            <section>
+              {running ? (
+                <div className="space-y-4">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="surface-card space-y-3 p-6">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-5 w-3/4" />
+                      <Skeleton className="h-20 w-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : items === null ? (
+                <div className="surface-card flex flex-col items-center p-16 text-center">
+                  <motion.span
+                    animate={{ scale: [1, 1.08, 1] }}
+                    transition={{ repeat: Infinity, duration: 2.4 }}
+                    className="bg-primary/12 text-primary flex size-14 items-center justify-center rounded-2xl"
+                  >
+                    <Sparkles className="size-6" />
+                  </motion.span>
+                  <h3 className="mt-4 font-semibold">No questions yet</h3>
+                  <p className="text-muted-foreground mt-1 max-w-sm text-sm">
+                    Pick a document and press generate — every item will arrive with citations.
+                  </p>
+                </div>
+              ) : items.length === 0 ? (
+                <div className="surface-card">
+                  <EmptyState
+                    title="No questions came back"
+                    message="Try a different document, difficulty or a higher count."
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-muted-foreground text-sm">
+                    Showing {items.length} of {count[0]} generated items · {type} focus · {level}{" "}
+                    bias
+                  </p>
+                  {items.map((q, i) => (
+                    <QuestionCard key={q.id} q={q} index={i} />
+                  ))}
+                </div>
               )}
-            </div>
-
-            <Button className="w-full" onClick={() => void run()} disabled={running}>
-              <Wand2 className="size-4" />
-              {running ? "Generating…" : "Generate questions"}
-            </Button>
+            </section>
           </div>
-
-          <div className="mt-6 border-t pt-5">
-            <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
-              Quality analysis
-            </p>
-            <dl className="mt-3 space-y-2">
-              {metrics.map((m) => (
-                <div key={m.label} className="flex items-center justify-between text-sm">
-                  <dt className="text-muted-foreground">{m.label}</dt>
-                  <dd className={cn("font-medium", m.tone)}>{m.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </aside>
-
-        <section>
-          {running ? (
-            <div className="space-y-4">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="surface-card space-y-3 p-6">
-                  <Skeleton className="h-4 w-40" />
-                  <Skeleton className="h-5 w-3/4" />
-                  <Skeleton className="h-20 w-full" />
-                </div>
-              ))}
-            </div>
-          ) : items === null ? (
-            <div className="surface-card flex flex-col items-center p-16 text-center">
-              <motion.span
-                animate={{ scale: [1, 1.08, 1] }}
-                transition={{ repeat: Infinity, duration: 2.4 }}
-                className="bg-primary/12 text-primary flex size-14 items-center justify-center rounded-2xl"
-              >
-                <Sparkles className="size-6" />
-              </motion.span>
-              <h3 className="mt-4 font-semibold">No questions yet</h3>
-              <p className="text-muted-foreground mt-1 max-w-sm text-sm">
-                Pick a document and press generate — every item will arrive with citations.
-              </p>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="surface-card">
-              <EmptyState
-                title="No questions came back"
-                message="Try a different document, difficulty or a higher count."
-              />
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-muted-foreground text-sm">
-                Showing {items.length} of {count[0]} generated items · {type} focus · {level} bias
-              </p>
-              {items.map((q, i) => (
-                <QuestionCard key={q.id} q={q} index={i} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+        </>
+      )}
     </AppShell>
   );
 }

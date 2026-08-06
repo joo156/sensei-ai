@@ -47,9 +47,6 @@ async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
     .eq("id", authUser.id)
     .limit(1)
     .maybeSingle();
-  // TEMP-DEBUG: trace profile lookup
-  console.log("[mergeUser] authUser.id =", authUser.id);
-  console.log("[mergeUser] profileRes =", profileRes);
   if (profileRes.error) throw toError(profileRes.error, "Could not load the user profile.");
   const profile = profileRes.data as DbProfile | null;
 
@@ -59,11 +56,8 @@ async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
     .eq("user_id", authUser.id)
     .limit(1)
     .maybeSingle();
-  // TEMP-DEBUG: trace role lookup
-  console.log("[mergeUser] roleRes =", roleRes);
   if (roleRes.error) throw toError(roleRes.error, "Could not load the user role.");
   const roleRow = roleRes.data as DbUserRole | null;
-  console.log("[mergeUser] roleRow =", roleRow, "| role value =", roleRow?.role);
 
   const name =
     profile?.full_name || authUser.user_metadata?.name || authUser.email?.split("@")[0] || "User";
@@ -75,8 +69,6 @@ async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
     initials: profile?.initials || initialsFor(name),
     role: roleRow?.role ?? "student",
   };
-  // TEMP-DEBUG: trace final merged user
-  console.log("[mergeUser] FINAL merged user =", merged);
   return merged;
 }
 
@@ -90,16 +82,12 @@ export async function mapSession(supabaseSession: SupabaseSession | null): Promi
     expires_at: supabaseSession.expires_at ?? Date.now(),
     user,
   };
-  // TEMP-DEBUG: trace final session built from Supabase session
-  console.log("[mapSession] FINAL session =", session);
   return session;
 }
 
 /** Sign in with email + password and return the mapped session. */
 export async function login({ email, password }: LoginRequest): Promise<LoginResponse> {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  // TEMP-DEBUG: trace authenticated user from Supabase
-  console.log("[login] signInWithPassword data =", data, "| error =", error);
   if (error) throw toError(error, "Wrong email or password.");
   const session = await mapSession(data.session);
   if (!session) throw new Error("Sign-in succeeded but no session was returned.");

@@ -43,8 +43,6 @@ export const AuthService = {
   /** Sign in with email + password and cache the resulting session. */
   async login(email: string, password: string): Promise<Session> {
     const { session } = await authApi.login({ email, password });
-    // TEMP-DEBUG: trace what AuthService receives from the api layer
-    console.log("[AuthService.login] session from api =", session);
     cachedSession = session;
     setAccessToken(session.access_token);
     return session;

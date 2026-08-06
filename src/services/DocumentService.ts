@@ -11,6 +11,16 @@ export const DocumentService = {
     return (await documentApi.getChunks(workspaceId, documentId)).chunks;
   },
 
+  /** Persist a new document record (text note or staged upload). */
+  async createDocument(workspaceId: string, doc: WsDoc): Promise<WsDoc> {
+    return (await documentApi.createDocument({ workspaceId, doc })).document;
+  },
+
+  /** Persist edits to a document record. */
+  async updateDocument(workspaceId: string, id: string, patch: Partial<WsDoc>): Promise<void> {
+    await documentApi.updateDocument({ workspaceId, id, patch });
+  },
+
   async saveNotes(workspaceId: string, documentId: string, notes: string): Promise<void> {
     await documentApi.saveDocumentNotes({ workspaceId, documentId, notes });
   },

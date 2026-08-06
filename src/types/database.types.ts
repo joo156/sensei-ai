@@ -49,6 +49,17 @@ export interface DbWorkspace {
   updated_at: string;
 }
 
+/** `workspace_with_owner` view row — workspaces joined with the owner profile
+ * plus computed counts and the workspace's overall review status. */
+export interface DbWorkspaceWithOwner extends DbWorkspace {
+  owner_name: string;
+  owner_email: string;
+  document_count: number;
+  generation_count: number;
+  pending_review_count: number;
+  review_status: ReviewStatus;
+}
+
 export interface DbDocument {
   id: string;
   workspace_id: string;
@@ -191,6 +202,9 @@ export interface Database {
       notifications: { Row: DbNotification };
       history: { Row: DbHistoryEntry };
       analytics: { Row: DbAnalyticsSnapshot };
+    };
+    Views: {
+      workspace_with_owner: { Row: DbWorkspaceWithOwner };
     };
   };
 }

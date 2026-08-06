@@ -10,6 +10,21 @@ export interface UploadDocumentResponse {
   storage_path: string;
 }
 
+export interface CreateDocumentRequest {
+  workspaceId: string;
+  doc: WsDoc;
+}
+
+export interface CreateDocumentResponse {
+  document: WsDoc;
+}
+
+export interface UpdateDocumentRequest {
+  workspaceId: string;
+  id: string;
+  patch: Partial<WsDoc>;
+}
+
 export interface ParseDocumentResponse {
   documentId: string;
   pages: number;

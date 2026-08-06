@@ -33,7 +33,7 @@ export function NotificationCenter() {
   const queryClient = useQueryClient();
 
   const { data, isPending, error, refetch } = useServiceQuery(
-    ["notifications", user?.role],
+    ["notifications", user?.id, user?.role],
     () => NotificationService.list(user?.role),
     { enabled: Boolean(user) },
   );

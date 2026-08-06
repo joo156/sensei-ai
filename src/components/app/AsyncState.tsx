@@ -90,6 +90,21 @@ export function EmptyState({
   );
 }
 
+/**
+ * Content placeholder for routes that are meaningless without an active
+ * workspace. The create action lives in the sidebar's workspace switcher, so
+ * this is purely informational.
+ */
+export function NoActiveWorkspace({ className }: { className?: string }) {
+  return (
+    <EmptyState
+      title="No active workspace"
+      message="Create your first workspace from the sidebar to get started."
+      className={className}
+    />
+  );
+}
+
 export interface AsyncSectionProps<T> {
   isLoading: boolean;
   error?: { message: string } | null;

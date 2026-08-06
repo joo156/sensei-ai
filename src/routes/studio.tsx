@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { RoleGate } from "@/components/app/RoleGate";
+import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { InteractiveQuiz } from "@/components/app/InteractiveQuiz";
 import { FlashcardDeck, type Flashcard } from "@/components/app/FlashcardDeck";
 import { ModelSelector, type ModelId } from "@/components/app/ModelSelector";
@@ -90,9 +91,10 @@ function StudioPage() {
   const [doc, setDoc] = useState<string>(docs[0]?.id ?? "");
 
   // The picker always follows the active workspace — never another workspace's material.
+  const workspaceId = workspace ? workspace.id : null;
   useEffect(() => {
     setDoc(docs[0]?.id ?? "");
-  }, [workspace.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (doc && !docs.some((d) => d.id === doc)) setDoc(docs[0]?.id ?? "");
@@ -102,7 +104,7 @@ function StudioPage() {
 
   return (
     <AppShell
-      title={`AI Studio · ${workspace.name}`}
+      title={workspace ? `AI Studio · ${workspace.name}` : "AI Studio"}
       description="Grounded to this workspace only — its documents, its chunks, its history."
       actions={
         <div className="hidden items-center gap-2 md:flex">
@@ -123,57 +125,65 @@ function StudioPage() {
         </div>
       }
     >
-      {/* Tab bar */}
-      <div className="mb-6 flex gap-1.5 overflow-x-auto">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "relative flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors",
-              tab === t.id ? "text-primary" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {tab === t.id && (
-              <motion.span
-                layoutId="studio-tab"
-                className="bg-primary/12 ring-primary/25 absolute inset-0 rounded-xl ring-1"
-              />
-            )}
-            <t.icon className="relative size-4" />
-            <span className="relative">{t.label}</span>
-            <span
-              className={cn(
-                "relative rounded px-1.5 py-0.5 text-[10px] font-semibold",
-                t.kind === "gen" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-              )}
-            >
-              {t.kind === "gen" ? "Generator" : "Chat"}
-            </span>
-          </button>
-        ))}
-      </div>
+      {!workspace ? (
+        <NoActiveWorkspace />
+      ) : (
+        <>
+          {/* Tab bar */}
+          <div className="mb-6 flex gap-1.5 overflow-x-auto">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "relative flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors",
+                  tab === t.id ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {tab === t.id && (
+                  <motion.span
+                    layoutId="studio-tab"
+                    className="bg-primary/12 ring-primary/25 absolute inset-0 rounded-xl ring-1"
+                  />
+                )}
+                <t.icon className="relative size-4" />
+                <span className="relative">{t.label}</span>
+                <span
+                  className={cn(
+                    "relative rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                    t.kind === "gen"
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {t.kind === "gen" ? "Generator" : "Chat"}
+                </span>
+              </button>
+            ))}
+          </div>
 
-      {tab === "questions" && <QuestionBankPanel model={model} doc={doc} />}
-      {tab === "test" && <TestHelpPanel model={model} doc={doc} />}
-      {tab === "flashcards" && <FlashcardsPanel model={model} doc={doc} />}
-      {tab === "plan" && <StudyPlanPanel model={model} doc={doc} />}
-      {tab === "revision" && <RevisionPanel model={model} doc={doc} />}
-      {tab === "mentor" && (
-        <ChatPanel
-          agent={active}
-          model={model}
-          doc={doc}
-          greeting="I'm your grounded mentor. Ask me anything about the selected document — I'll only speak from what's cited."
-        />
-      )}
-      {tab === "concept" && (
-        <ChatPanel
-          agent={active}
-          model={model}
-          doc={doc}
-          greeting="Ask me to explain any concept from your material. I'll break it down with citations."
-        />
+          {tab === "questions" && <QuestionBankPanel model={model} doc={doc} />}
+          {tab === "test" && <TestHelpPanel model={model} doc={doc} />}
+          {tab === "flashcards" && <FlashcardsPanel model={model} doc={doc} />}
+          {tab === "plan" && <StudyPlanPanel model={model} doc={doc} />}
+          {tab === "revision" && <RevisionPanel model={model} doc={doc} />}
+          {tab === "mentor" && (
+            <ChatPanel
+              agent={active}
+              model={model}
+              doc={doc}
+              greeting="I'm your grounded mentor. Ask me anything about the selected document — I'll only speak from what's cited."
+            />
+          )}
+          {tab === "concept" && (
+            <ChatPanel
+              agent={active}
+              model={model}
+              doc={doc}
+              greeting="Ask me to explain any concept from your material. I'll break it down with citations."
+            />
+          )}
+        </>
       )}
     </AppShell>
   );
@@ -204,6 +214,8 @@ function QuestionBankPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [count, setCount] = useState(5);
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<GeneratedQuestion[] | null>(null);
+
+  if (!workspace) return null;
 
   const generate = async () => {
     setBusy(true);
@@ -281,6 +293,8 @@ function TestHelpPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [set, setSet] = useState<GeneratedQuestion[] | null>(null);
+
+  if (!workspace) return null;
 
   const generate = async () => {
     setBusy(true);
@@ -366,6 +380,8 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [busy, setBusy] = useState(false);
   const [deck, setDeck] = useState<Flashcard[] | null>(null);
 
+  if (!workspace) return null;
+
   const generate = async () => {
     setBusy(true);
     setDeck(null);
@@ -438,6 +454,8 @@ function StudyPlanPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [hoursPerDay, setHoursPerDay] = useState(2);
   const [busy, setBusy] = useState(false);
   const [plan, setPlan] = useState<{ day: number; topics: string[]; hours: number }[] | null>(null);
+
+  if (!workspace) return null;
 
   const generate = async () => {
     setBusy(true);
@@ -525,6 +543,8 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [items, setItems] = useState<{ topic: string; strength: number; action: string }[] | null>(
     null,
   );
+
+  if (!workspace) return null;
 
   const generate = async () => {
     setBusy(true);
@@ -633,9 +653,12 @@ function ChatPanel({
   const [busy, setBusy] = useState(false);
 
   // A new session always inherits the current workspace: switching workspace starts a fresh thread.
+  const workspaceId = workspace ? workspace.id : null;
   useEffect(() => {
     setChatId(null);
-  }, [workspace.id, agent.label]);
+  }, [workspaceId, agent.label]);
+
+  if (!workspace) return null;
 
   const stored = data.chats.find((c) => c.id === chatId);
   const messages = stored?.messages ?? [
@@ -847,6 +870,7 @@ function SliderField({
 
 function DocLine({ doc }: { doc: string }) {
   const { active, data } = useWorkspace();
+  if (!active) return null;
   const d: WsDoc | undefined = data.docs.find((x) => x.id === doc);
   return (
     <div className="border-border bg-muted/40 rounded-lg border p-2.5 text-xs">

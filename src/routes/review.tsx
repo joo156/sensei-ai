@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { RoleGate } from "@/components/app/RoleGate";
+import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewBadge, NeutralBadge, DifficultyBadge } from "@/components/app/badges";
@@ -102,7 +103,7 @@ function Review() {
 
   return (
     <AppShell
-      title={`Human Review · ${active.name}`}
+      title={active ? `Human Review · ${active.name}` : "Human Review"}
       description="Every AI output is flagged, evidenced and decided here. Exports unlock only for approved items."
       actions={
         <Button
@@ -114,89 +115,96 @@ function Review() {
         </Button>
       }
     >
-      {items.length === 0 ? (
-        <div className="surface-card p-12 text-center">
-          <h3 className="font-semibold">Nothing to review in {active.name}</h3>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Generate outputs in the AI Studio and they will queue up here.
-          </p>
-        </div>
+      {!active ? (
+        <NoActiveWorkspace />
       ) : (
         <>
-          {counts.flagged > 0 && (
-            <div className="border-warning/35 bg-warning/10 mb-6 flex items-start gap-3 rounded-2xl border p-4">
-              <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
-              <div>
-                <p className="text-sm font-medium">
-                  {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic
-                  validation
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-sm">
-                  Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below{" "}
-                  {QUALITY_TARGET}
-                  /10, retrieval match is weak, or distractors overlap.
-                </p>
-              </div>
+          {items.length === 0 ? (
+            <div className="surface-card p-12 text-center">
+              <h3 className="font-semibold">Nothing to review in {active.name}</h3>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Generate outputs in the AI Studio and they will queue up here.
+              </p>
             </div>
-          )}
-
-          <div className="mb-5 flex flex-wrap gap-1.5">
-            {(
-              [
-                ["all", "All"],
-                ["flagged", "Flagged"],
-                ["pending", "Pending"],
-                ["approved", "Approved"],
-                ["rejected", "Rejected"],
-              ] as [FilterId, string][]
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setFilter(id)}
-                className={cn(
-                  "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
-                  filter === id
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:border-primary/40",
-                )}
-              >
-                {label} · {counts[id]}
-              </button>
-            ))}
-          </div>
-
-          <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-            <div className="min-w-0 space-y-5">
-              {visible.length === 0 && (
-                <div className="surface-card p-10 text-center text-sm">
-                  No items match this filter.
+          ) : (
+            <>
+              {counts.flagged > 0 && (
+                <div className="border-warning/35 bg-warning/10 mb-6 flex items-start gap-3 rounded-2xl border p-4">
+                  <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium">
+                      {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic
+                      validation
+                    </p>
+                    <p className="text-muted-foreground mt-0.5 text-sm">
+                      Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below{" "}
+                      {QUALITY_TARGET}
+                      /10, retrieval match is weak, or distractors overlap.
+                    </p>
+                  </div>
                 </div>
               )}
-              {visible.map((q, i) => (
-                <ReviewItem
-                  key={q.id}
-                  q={q}
-                  index={i}
-                  comment={comments[q.id] ?? ""}
-                  onComment={(v) => setComments((c) => ({ ...c, [q.id]: v }))}
-                  onDecide={(s) => decide(q, s)}
-                  onFlag={() => {
-                    addAudit({
-                      itemId: q.id,
-                      itemLabel: q.prompt,
-                      action: "Flagged",
-                      actor: "You",
-                      comment: comments[q.id]?.trim() || "Manually flagged for a second opinion",
-                    });
-                    setComments((c) => ({ ...c, [q.id]: "" }));
-                    toast.info("Flagged for a second reviewer");
-                  }}
-                />
-              ))}
-            </div>
 
-            <AuditPanel entries={audit} />
-          </div>
+              <div className="mb-5 flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ["all", "All"],
+                    ["flagged", "Flagged"],
+                    ["pending", "Pending"],
+                    ["approved", "Approved"],
+                    ["rejected", "Rejected"],
+                  ] as [FilterId, string][]
+                ).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setFilter(id)}
+                    className={cn(
+                      "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
+                      filter === id
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/40",
+                    )}
+                  >
+                    {label} · {counts[id]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+                <div className="min-w-0 space-y-5">
+                  {visible.length === 0 && (
+                    <div className="surface-card p-10 text-center text-sm">
+                      No items match this filter.
+                    </div>
+                  )}
+                  {visible.map((q, i) => (
+                    <ReviewItem
+                      key={q.id}
+                      q={q}
+                      index={i}
+                      comment={comments[q.id] ?? ""}
+                      onComment={(v) => setComments((c) => ({ ...c, [q.id]: v }))}
+                      onDecide={(s) => decide(q, s)}
+                      onFlag={() => {
+                        addAudit({
+                          itemId: q.id,
+                          itemLabel: q.prompt,
+                          action: "Flagged",
+                          actor: "You",
+                          comment:
+                            comments[q.id]?.trim() || "Manually flagged for a second opinion",
+                        });
+                        setComments((c) => ({ ...c, [q.id]: "" }));
+                        toast.info("Flagged for a second reviewer");
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <AuditPanel entries={audit} />
+              </div>
+            </>
+          )}
         </>
       )}
     </AppShell>

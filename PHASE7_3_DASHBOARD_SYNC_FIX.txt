@@ -1,0 +1,104 @@
+PHASE 7.3 — DASHBOARD "CONTINUE STUDYING" SYNC FIX
+==================================================
+Date: 2026-08-06
+Status: COMPLETE (type-check, lint, build all green)
+
+------------------------------------------------------------------------------
+ROOT CAUSE
+------------------------------------------------------------------------------
+The Dashboard Home page (src/routes/home.tsx) rendered the "Continue Studying"
+card from hardcoded strings, not from workspace data:
+
+  - "Chapter 3 — Data Types & Variables"       (hardcoded title)
+  - "You reviewed 12 of 25 grounded questions" (hardcoded copy)
+  - "18 min left"                              (hardcoded)
+  - "Introduction to Python"                   (hardcoded)
+
+The card never read from useWorkspace() at all, so it could not react to new
+documents, workspace switches, refreshes, or re-login. The rest of the page
+already consumed real data (the "Recent documents" grid renders
+data.docs.slice(0, 4)), confirming the persisted documents already live in the
+workspace store via the bootstrap query.
+
+No mock values remain in the card, and no new fetching was added — the card
+derives from the existing reactive workspace store, so it updates automatically
+whenever documents change, the active workspace changes, the page refreshes, or
+the user logs in again.
+
+------------------------------------------------------------------------------
+FILES MODIFIED (1)
+------------------------------------------------------------------------------
+  - src/routes/home.tsx
+      * Removed the four hardcoded strings above from the "Continue Studying"
+        card.
+      * Derived `latest` from the real workspace data:
+          [...data.docs].sort((a, b) => b.uploaded.localeCompare(a.uploaded))[0]
+        (newest first; stable sort keeps the DB's created_at-desc order for
+        same-day ties, and it also works when the mock store is not pre-sorted).
+      * Card now renders from `latest`:
+          - title                       -> latest.title
+          - subject/category            -> latest.tags.join(" · ") when present,
+                                            otherwise a kind label
+          - kind label (real)           -> "Text Document" / "PDF Document" /
+                                            "Word Document" / "Slides Document"
+          - created date (real)         -> "Created today" or "Created <date>"
+          - progress placeholder        -> latest.pages (persisted), not a mock
+          - review/index status         -> latest.status chip ("Ready" green /
+                                            "Processing" amber)
+      * Empty state (no documents): "No study material yet. / Upload or create
+        your first document." — no fabricated data.
+      * CTA button links to /library ("View material" / "Browse library").
+      * Added helpers kindLabel() and createdLabel() (pure, no state) and an
+        import of the WsDoc type.
+
+------------------------------------------------------------------------------
+NEW DATA FLOW
+------------------------------------------------------------------------------
+  Documents are persisted by the Phase 7.3 fix (src/routes/library.tsx ->
+  DocumentService.createDocument -> src/api/document.api.ts -> Supabase
+  `documents` table). The Workspace bootstrap
+  (getWorkspaceBootstrap in src/api/workspace.api.ts) already loads those rows
+  per workspace into the React Query cache keyed
+  ["workspace-bootstrap", user?.id], and WorkspaceContext.addDoc prepends to
+  the in-memory store + invalidates that query.
+
+  Home page "Continue Studying":
+    useWorkspace().data.docs  ->  newest doc  ->  card
+                    (reactive, no manual refresh, no new API call)
+
+  Update triggers:
+    - new text document created  -> addDoc mutates the store + refetch
+    - workspace switch           -> activeId changes, store slot swaps
+    - page refresh               -> bootstrap refetches from Supabase
+    - login again                -> AuthContext purges cache, bootstrap refetches
+
+------------------------------------------------------------------------------
+VALIDATION
+------------------------------------------------------------------------------
+  npx tsc --noEmit   -> PASS
+  npm run lint       -> PASS (0 errors; 13 pre-existing react-refresh warnings
+                       in unrelated files)
+  npm run build      -> PASS (client + SSR + Nitro)
+
+  Behavioural matrix (by construction):
+    - No docs in workspace  -> empty-state card
+    - Docs exist            -> newest document shown with real title / kind /
+                                tags / created date / pages / status
+    - Workspace switch      -> card reflects the selected workspace's newest doc
+    - New note saved        -> card updates to it immediately (store mutation)
+    - Refresh / re-login    -> card reflects persisted Supabase rows
+
+------------------------------------------------------------------------------
+COMMANDS EXECUTED
+------------------------------------------------------------------------------
+  npx tsc --noEmit
+  npm run lint
+  npm run build
+
+------------------------------------------------------------------------------
+FINAL STATUS
+------------------------------------------------------------------------------
+DONE. The "Continue Studying" card is fully driven by persisted workspace
+documents from the existing bootstrap/service/cache — no mock values, no
+duplicate API calls, no manual refresh. Constraint respected: no changes to
+upload flow, ingestion, storage, RLS, authentication, or workspace ownership.

@@ -8,8 +8,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { emptyWorkspaceData } from "@/lib/workspace";
-import { WorkspaceService } from "@/services";
+import { supabase } from "@/lib/supabase";
+import { isMockMode } from "@/config/env";
+import { logger } from "@/lib/logger";
+import { useAuth } from "@/contexts/AuthContext";
+import { DocumentService, WorkspaceService } from "@/services";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
 import type {
@@ -28,19 +33,23 @@ const STORAGE_KEY = STORAGE_KEYS.workspaceActive;
 const STATE_KEY = STORAGE_KEYS.workspaceState;
 
 interface PersistShape {
-  activeId: string;
+  activeId: string | null;
   workspaces: Workspace[];
   store: Record<string, WorkspaceData>;
 }
 
 interface WorkspaceCtx {
   workspaces: Workspace[];
-  active: Workspace;
+  /** The active workspace — null until the user creates their first one. */
+  active: Workspace | null;
   setActive: (id: string) => void;
-  addWorkspace: (input: { name: string; description: string }) => Workspace;
+  addWorkspace: (input: { name: string; description: string }) => Promise<Workspace>;
+  /** Refetch the workspace list from the server. */
+  refreshWorkspaces: () => void;
   /** Data scoped to the active workspace — switching swaps everything. */
   data: WorkspaceData;
-  addDoc: (doc: WsDoc) => void;
+  /** Persist a new document (text note or staged upload) and add it to the store. */
+  addDoc: (doc: WsDoc) => Promise<void>;
   updateDoc: (id: string, patch: Partial<WsDoc>) => void;
   removeDoc: (id: string) => void;
   /** Review + audit */
@@ -67,9 +76,29 @@ function nowStamp() {
  * Keeps the provider itself free of any mock/seed import.
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { data, isPending, error, refetch } = useServiceQuery(["workspace-bootstrap"], () =>
-    WorkspaceService.bootstrap(),
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { data, isPending, error, refetch } = useServiceQuery(
+    ["workspace-bootstrap", user?.id ?? null],
+    () => WorkspaceService.bootstrap(),
+    { refetchOnWindowFocus: true },
   );
+
+  // Realtime: when a workspace row the current user can see changes, refresh
+  // ONLY the workspace-bootstrap cache (never the whole query cache). RLS on
+  // the subscribed table filters delivered events to this user's workspaces.
+  useEffect(() => {
+    if (isMockMode() || !user) return;
+    const channel = supabase
+      .channel(`workspace-updates-${user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "workspaces" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      })
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user, queryClient]);
 
   if (isPending) {
     return (
@@ -79,12 +108,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (error || !data || data.workspaces.length === 0) {
+  if (error || !data) {
     return (
       <div className="bg-background flex min-h-screen items-center justify-center px-6">
         <ErrorState
-          title={error ? "Unable to load your workspaces" : "No workspaces yet"}
-          message={error?.message ?? "Create a workspace to get started."}
+          title="Unable to load your workspaces"
+          message={error?.message ?? "Please try again."}
           onRetry={() => void refetch()}
         />
       </div>
@@ -107,28 +136,41 @@ function WorkspaceStore({
   seedStore: Record<string, WorkspaceData>;
   children: ReactNode;
 }) {
-  const [activeId, setActiveId] = useState<string>(seedWorkspaces[0].id);
+  const [activeId, setActiveId] = useState<string | null>(seedWorkspaces[0]?.id ?? null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>(seedWorkspaces);
   const [store, setStore] = useState<Record<string, WorkspaceData>>(seedStore);
   const hydrated = useRef(false);
+  const queryClient = useQueryClient();
 
-  // Load persisted state after hydration.
+  // Restore persisted UI state after hydration. The workspace LIST always comes
+  // from the server (seedWorkspaces) — a stale local copy must never override
+  // it. Only the active id and per-workspace draft data are restored, scoped to
+  // workspaces that still exist on the server.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STATE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PersistShape;
-        if (parsed.workspaces?.length) setWorkspaces(parsed.workspaces);
-        if (parsed.store) setStore(parsed.store);
-        if (parsed.activeId) setActiveId(parsed.activeId);
+      const parsed = raw ? (JSON.parse(raw) as PersistShape) : null;
+      const ids = new Set(seedWorkspaces.map((w) => w.id));
+      if (parsed) {
+        if (parsed.store) {
+          setStore(Object.fromEntries(Object.entries(parsed.store).filter(([id]) => ids.has(id))));
+        }
+        if (parsed.activeId && ids.has(parsed.activeId)) setActiveId(parsed.activeId);
       } else {
         const legacy = window.localStorage.getItem(STORAGE_KEY);
-        if (legacy && seedWorkspaces.some((w) => w.id === legacy)) setActiveId(legacy);
+        if (legacy && ids.has(legacy)) setActiveId(legacy);
       }
     } catch {
       /* ignore */
     }
     hydrated.current = true;
+  }, [seedWorkspaces]);
+
+  // The server list is authoritative: whenever the bootstrap query refreshes
+  // (window focus, reconnect, or invalidation after a mutation), propagate it
+  // into state so workspaces deleted outside the app disappear immediately.
+  useEffect(() => {
+    setWorkspaces(seedWorkspaces);
   }, [seedWorkspaces]);
 
   // Persist everything so notes, chats and review history survive a reload.
@@ -139,13 +181,19 @@ function WorkspaceStore({
         STATE_KEY,
         JSON.stringify({ activeId, workspaces, store } satisfies PersistShape),
       );
-      window.localStorage.setItem(STORAGE_KEY, activeId);
+      window.localStorage.setItem(STORAGE_KEY, activeId ?? "");
     } catch {
       /* ignore */
     }
   }, [activeId, workspaces, store]);
 
-  const setActive = useCallback((id: string) => setActiveId(id), []);
+  const setActive = useCallback(
+    (id: string) => {
+      // Ignore ids that don't exist — nothing to activate when the list is empty.
+      setActiveId((prev) => (workspaces.some((w) => w.id === id) ? id : prev));
+    },
+    [workspaces],
+  );
 
   const mutate = useCallback(
     (id: string, fn: (d: WorkspaceData) => WorkspaceData) =>
@@ -154,8 +202,8 @@ function WorkspaceStore({
   );
 
   const value = useMemo<WorkspaceCtx>(() => {
-    const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0];
-    const raw = store[active.id] ?? emptyWorkspaceData();
+    const active = workspaces.find((w) => w.id === activeId) ?? workspaces[0] ?? null;
+    const raw = active ? (store[active.id] ?? emptyWorkspaceData()) : emptyWorkspaceData();
     const data: WorkspaceData = { ...raw, audit: raw.audit ?? [] };
 
     const pushAudit = (d: WorkspaceData, entry: WsAuditEntry): WorkspaceData => ({
@@ -167,40 +215,48 @@ function WorkspaceStore({
       workspaces,
       active,
       setActive,
-      addWorkspace: ({ name, description }) => {
-        const base = name
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-|-$/g, "");
-        let id = base || `workspace-${Date.now()}`;
-        if (workspaces.some((w) => w.id === id)) id = `${id}-${Date.now().toString(36).slice(-4)}`;
-        const ws: Workspace = {
-          id,
-          name: name.trim(),
-          subject: description.trim() || "New workspace",
-          description: description.trim(),
-          docs: 0,
-          assets: 0,
-          pendingReview: 0,
-          lastActive: "Just now",
-          accent: "primary",
-        };
-        setWorkspaces((prev) => [...prev, ws]);
-        setStore((prev) => ({ ...prev, [id]: emptyWorkspaceData() }));
-        setActiveId(id);
-        return ws;
+      refreshWorkspaces: () => {
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      },
+      addWorkspace: async ({ name, description }) => {
+        const result = await WorkspaceService.createWorkspace({ name, description });
+        if (!result.success) throw new Error(result.error.message);
+        const workspace = result.data;
+        setWorkspaces((prev) => [...prev, workspace]);
+        setStore((prev) => ({ ...prev, [workspace.id]: emptyWorkspaceData() }));
+        setActiveId(workspace.id);
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+        return workspace;
       },
       data,
-      addDoc: (doc) => mutate(active.id, (d) => ({ ...d, docs: [doc, ...d.docs] })),
-      updateDoc: (id, patch) =>
+      addDoc: async (doc) => {
+        if (!active) return;
+        const persisted = await DocumentService.createDocument(active.id, doc);
+        mutate(active.id, (d) => ({
+          ...d,
+          docs: [persisted, ...d.docs.filter((x) => x.id !== persisted.id)],
+        }));
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      },
+      updateDoc: (id, patch) => {
+        if (!active) return;
         mutate(active.id, (d) => ({
           ...d,
           docs: d.docs.map((x) => (x.id === id ? { ...x, ...patch } : x)),
-        })),
-      removeDoc: (id) =>
-        mutate(active.id, (d) => ({ ...d, docs: d.docs.filter((x) => x.id !== id) })),
-      setReview: (itemId, state, opts) =>
+        }));
+        void DocumentService.updateDocument(active.id, id, patch).catch((err) =>
+          logger.warn("Failed to persist document update", err),
+        );
+      },
+      removeDoc: (id) => {
+        if (!active) return;
+        mutate(active.id, (d) => ({ ...d, docs: d.docs.filter((x) => x.id !== id) }));
+        void DocumentService.deleteDocument(id).catch((err) =>
+          logger.warn("Failed to persist document deletion", err),
+        );
+      },
+      setReview: (itemId, state, opts) => {
+        if (!active) return;
         mutate(active.id, (d) => {
           const item = d.questions.find((q) => q.id === itemId);
           const next: WorkspaceData = {
@@ -217,26 +273,37 @@ function WorkspaceStore({
             at: nowStamp(),
             comment: opts?.comment,
           });
-        }),
-      addAudit: (entry) =>
+        });
+      },
+      addAudit: (entry) => {
+        if (!active) return;
         mutate(active.id, (d) =>
           pushAudit(d, {
             ...entry,
             id: `aud-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             at: entry.at ?? nowStamp(),
           }),
-        ),
-      addChat: (chat) => mutate(active.id, (d) => ({ ...d, chats: [chat, ...d.chats] })),
-      appendChatMessage: (chatId, message) =>
+        );
+      },
+      addChat: (chat) => {
+        if (!active) return;
+        mutate(active.id, (d) => ({ ...d, chats: [chat, ...d.chats] }));
+      },
+      appendChatMessage: (chatId, message) => {
+        if (!active) return;
         mutate(active.id, (d) => ({
           ...d,
           chats: d.chats.map((c) =>
             c.id === chatId ? { ...c, messages: [...c.messages, message] } : c,
           ),
-        })),
-      addHistory: (row) => mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] })),
+        }));
+      },
+      addHistory: (row) => {
+        if (!active) return;
+        mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] }));
+      },
     };
-  }, [activeId, setActive, store, mutate, workspaces]);
+  }, [activeId, queryClient, setActive, store, mutate, workspaces]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
