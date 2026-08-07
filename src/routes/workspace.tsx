@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { NeutralBadge } from "@/components/app/badges";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { DocumentService } from "@/services";
 import type { WsChunk, WsDoc } from "@/types/domain";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -49,10 +50,12 @@ export const Route = createFileRoute("/workspace")({
 });
 
 function WorkspacePage() {
-  const { active, data } = useWorkspace();
+  const { active, data, updateDoc } = useWorkspace();
   const [docId, setDocId] = useState<string | null>(null);
   const [chunkId, setChunkId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [chunksLoading, setChunksLoading] = useState(false);
+  const fetchedChunksFor = useRef<string | null>(null);
 
   // Switching workspace resets the drill-down.
   const activeId = active ? active.id : null;
@@ -61,6 +64,33 @@ function WorkspacePage() {
     setChunkId(null);
     setQuery("");
   }, [activeId]);
+
+  // Backend document lists carry `chunks: []`, so the parsed sections are
+  // fetched the first time a document is opened (fresh uploads already carry
+  // them, reloaded documents get them from GET /documents/{id}/chunks).
+  useEffect(() => {
+    if (!activeId || !docId) return;
+    const found = data.docs.find((d) => d.id === docId);
+    if ((found && found.chunks.length > 0) || fetchedChunksFor.current === docId) return;
+    fetchedChunksFor.current = docId;
+    setChunksLoading(true);
+    let cancelled = false;
+    DocumentService.listChunks(activeId, docId)
+      .then((chunks) => {
+        if (cancelled) return;
+        if (chunks.length > 0) updateDoc(docId, { chunks });
+        setChunksLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          fetchedChunksFor.current = null;
+          setChunksLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId, docId, data.docs, updateDoc]);
 
   const doc: WsDoc | undefined = data.docs.find((d) => d.id === docId);
   const chunk: WsChunk | undefined = doc?.chunks.find((c) => c.id === chunkId);
@@ -217,7 +247,9 @@ function WorkspacePage() {
                 <h3 className="mt-6 mb-3 text-sm font-semibold">Sections in this lecture</h3>
                 {doc.chunks.length === 0 ? (
                   <div className="surface-card p-8 text-center text-sm">
-                    This material is still being prepared — sections will appear here shortly.
+                    {chunksLoading
+                      ? "Loading sections…"
+                      : "This material is still being prepared — sections will appear here shortly."}
                   </div>
                 ) : (
                   <ul className="space-y-2">
