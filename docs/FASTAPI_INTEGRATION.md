@@ -93,7 +93,7 @@ body `{ "workspaceId", "itemId", "comment?", "label?" }` →
     "itemId": "q-1",
     "itemLabel": "...",
     "action": "Approved",
-    "actor": "Noor Patel",
+    "actor": "Name 3",
     "at": "2026-08-02 14:03",
     "comment": "..."
   }

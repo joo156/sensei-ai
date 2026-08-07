@@ -25,8 +25,8 @@ export const workspaces: Workspace[] = [
     accent: "primary",
     owner: {
       id: "user-student",
-      name: "Amira Rahman",
-      email: "student@demo.com",
+      name: "Nour Atef",
+      email: "student@sensei.ai",
     },
   },
   {
@@ -42,8 +42,8 @@ export const workspaces: Workspace[] = [
     accent: "info",
     owner: {
       id: "user-reviewer",
-      name: "Noor Patel",
-      email: "reviewer@demo.com",
+      name: "Name 3",
+      email: "reviewer@sensei.ai",
     },
   },
   {
@@ -59,8 +59,8 @@ export const workspaces: Workspace[] = [
     accent: "success",
     owner: {
       id: "user-admin",
-      name: "Kenji Ito",
-      email: "admin@demo.com",
+      name: "Yousef Alaa",
+      email: "admin@sensei.ai",
     },
   },
   {
@@ -76,8 +76,8 @@ export const workspaces: Workspace[] = [
     accent: "warning",
     owner: {
       id: "user-student",
-      name: "Amira Rahman",
-      email: "student@demo.com",
+      name: "Nour Atef",
+      email: "student@sensei.ai",
     },
   },
 ];
@@ -783,7 +783,7 @@ export const notifications: AppNotification[] = [
     id: "s1",
     kind: "done",
     title: "Your question was approved",
-    detail: "out-8974 · reviewed by Noor Patel · Python Course",
+    detail: "out-8974 · reviewed by Name 3 · Python Course",
     time: "12m",
     unread: true,
     roles: ["student"],
