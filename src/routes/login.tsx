@@ -126,7 +126,7 @@ function LoginPage() {
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="student@demo.com"
+                placeholder="student@sensei.ai"
                 className="mt-1.5"
                 required
               />

@@ -7,32 +7,32 @@ export interface MockAccount {
 }
 
 export const mockAccounts: Record<string, MockAccount> = {
-  "student@demo.com": {
+  "student@sensei.ai": {
     password: "student",
     user: {
       id: "user-student",
-      email: "student@demo.com",
-      name: "Amira Rahman",
+      email: "student@sensei.ai",
+      name: "Nour Atef",
       role: "student",
       initials: "AR",
     },
   },
-  "reviewer@demo.com": {
+  "reviewer@sensei.ai": {
     password: "reviewer",
     user: {
       id: "user-reviewer",
-      email: "reviewer@demo.com",
-      name: "Noor Patel",
+      email: "reviewer@sensei.ai",
+      name: "Name 3",
       role: "reviewer",
       initials: "NP",
     },
   },
-  "admin@demo.com": {
+  "admin@sensei.ai": {
     password: "admin",
     user: {
       id: "user-admin",
-      email: "admin@demo.com",
-      name: "Kenji Ito",
+      email: "admin@sensei.ai",
+      name: "Yousef Alaa",
       role: "admin",
       initials: "KI",
     },

@@ -14,52 +14,52 @@ export interface TeamMember {
 
 export const TEAM: TeamMember[] = [
   {
-    name: "Amira Rahman",
-    role: "Team Lead & RAG Engineer",
+    name: "Nour Atef",
+    role: "RAG Engineer",
     focus: "Retrieval pipeline",
     contribution:
       "Designed the ingestion pipeline — document parsing, semantic chunking and the hybrid retriever that keeps every generated answer tied to a real passage.",
-    initials: "AR",
+    initials: "NA",
     linkedin: "https://linkedin.com",
     github: "https://github.com",
   },
   {
-    name: "Kenji Ito",
-    role: "AI Agent Engineer",
+    name: "Yousef Alaa",
+    role: "AI Agent Engineer & Frontend Engineer",
     focus: "Multi-agent system",
     contribution:
       "Built the seven study agents (Question Bank, Mentor, Test Help, Flashcards, Concept, Study Plan, Revision) and the prompt + model-routing layer behind them.",
-    initials: "KI",
+    initials: "YA",
     linkedin: "https://linkedin.com",
     github: "https://github.com",
   },
   {
-    name: "Noor Patel",
+    name: "Name 3",
     role: "Frontend Engineer",
     focus: "Product interface",
     contribution:
       "Built the workspace experience: isolated project workspaces, the document explorer, interactive quizzes and the animated flashcard deck.",
-    initials: "NP",
+    initials: "__",
     linkedin: "https://linkedin.com",
     github: "https://github.com",
   },
   {
-    name: "Omar Khalil",
+    name: "Name 4",
     role: "Backend & Data Engineer",
     focus: "APIs & storage",
     contribution:
       "Owned the data model, embeddings store, generation history and the review workflow that records who approved what and when.",
-    initials: "OK",
+    initials: "__",
     linkedin: "https://linkedin.com",
     github: "https://github.com",
   },
   {
-    name: "Lina Farouk",
+    name: "Name 5",
     role: "Quality & Evaluation",
     focus: "Evaluation harness",
     contribution:
       "Created the evaluation set and review rubric, ran the model comparisons and tuned difficulty calibration across the question bank.",
-    initials: "LF",
+    initials: "__",
     linkedin: "https://linkedin.com",
     github: "https://github.com",
   },

@@ -183,9 +183,9 @@ function Landing() {
             </div>
             <div className="text-muted-foreground mt-6 flex flex-wrap items-center gap-4 text-xs">
               <span>Demo accounts:</span>
-              <code className="bg-muted rounded px-2 py-1">student@demo.com</code>
-              <code className="bg-muted rounded px-2 py-1">reviewer@demo.com</code>
-              <code className="bg-muted rounded px-2 py-1">admin@demo.com</code>
+              <code className="bg-muted rounded px-2 py-1">student@sensei.ai</code>
+              <code className="bg-muted rounded px-2 py-1">reviewer@sensei.ai</code>
+              <code className="bg-muted rounded px-2 py-1">admin@sensei.ai</code>
             </div>
           </motion.div>
 

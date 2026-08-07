@@ -22,7 +22,7 @@ function toError(error: { message?: string } | null | undefined, fallback: strin
   return new Error(error?.message ?? fallback);
 }
 
-/** Best-effort initials (e.g. "Amira Rahman" → "AR"). */
+/** Best-effort initials (e.g. "Nour Atef" → "AR"). */
 function initialsFor(name: string): string {
   const initials = name
     .trim()

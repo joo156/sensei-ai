@@ -88,9 +88,9 @@ Demo accounts:
 
 | Role     | Email               | Password   |
 | -------- | ------------------- | ---------- |
-| Student  | `student@demo.com`  | `student`  |
-| Reviewer | `reviewer@demo.com` | `reviewer` |
-| Admin    | `admin@demo.com`    | `admin`    |
+| Student  | `student@sensei.ai`  | `student`  |
+| Reviewer | `reviewer@sensei.ai` | `reviewer` |
+| Admin    | `admin@sensei.ai`    | `admin`    |
 
 ## AI providers
 
