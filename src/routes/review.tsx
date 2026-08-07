@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -22,8 +22,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewBadge, NeutralBadge, DifficultyBadge } from "@/components/app/badges";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { ExportService, ReviewService } from "@/services";
+import { getReviewItems } from "@/api/review.api";
+import { isMockMode } from "@/config/env";
 import type { GeneratedQuestion, ReviewState } from "@/types/domain";
 import type { WsAuditEntry } from "@/types/domain";
+import type { ReviewItem } from "@/types/api/review.contracts";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -69,13 +73,97 @@ function flagsFor(q: GeneratedQuestion): string[] {
   return f;
 }
 
+/** Backend output status → UI review state. */
+function reviewStateFromItem(item: ReviewItem): ReviewState {
+  switch (item.status) {
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    case "needs_edit":
+    case "edited":
+      return "Needs Edit";
+    default:
+      return "Pending";
+  }
+}
+
+/**
+ * Merge backend review items with the local draft list, de-duplicating by id.
+ * The backend item's persisted status wins so a reload shows the real decision.
+ */
+function mergeItems(local: GeneratedQuestion[], dbItems: ReviewItem[]): GeneratedQuestion[] {
+  const byId = new Map<string, GeneratedQuestion>();
+  for (const q of local) byId.set(q.id, q);
+  for (const item of dbItems) {
+    const review = reviewStateFromItem(item);
+    const questions = (item.payload?.questions ?? []) as Partial<GeneratedQuestion>[];
+    if (questions.length === 0) continue;
+    for (const partial of questions) {
+      if (!partial?.id) continue;
+      byId.set(partial.id, {
+        id: partial.id,
+        prompt: String(partial.prompt ?? item.id),
+        type: (partial.type as GeneratedQuestion["type"]) ?? "MCQ",
+        difficulty: (partial.difficulty as GeneratedQuestion["difficulty"]) ?? "Beginner",
+        options: partial.options ?? [],
+        answer: String(partial.answer ?? ""),
+        rationale: String(partial.rationale ?? ""),
+        bloom: (partial.bloom as GeneratedQuestion["bloom"]) ?? "Understanding",
+        quality: Number(partial.quality ?? 0),
+        grounded: Number(partial.grounded ?? 0),
+        estMinutes: Number(partial.estMinutes ?? 2),
+        review,
+        citations: (partial.citations as GeneratedQuestion["citations"]) ?? [],
+      });
+    }
+  }
+  return Array.from(byId.values());
+}
+
 function Review() {
   const { active, data, setReview, addAudit } = useWorkspace();
   const [filter, setFilter] = useState<FilterId>("all");
   const [comments, setComments] = useState<Record<string, string>>({});
+  const [dbItems, setDbItems] = useState<ReviewItem[]>([]);
+  const [dbAudit, setDbAudit] = useState<WsAuditEntry[]>([]);
 
-  const items = data.questions;
-  const audit = data.audit ?? [];
+  // Real mode: hydrate the review queue and audit from the backend so decisions
+  // and items survive a reload (the backend is the source of truth, not the
+  // local WorkspaceContext).
+  useEffect(() => {
+    if (isMockMode() || !active) {
+      setDbItems([]);
+      setDbAudit([]);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all([getReviewItems(active.id), ReviewService.auditHistory(active.id)])
+      .then(([res, audit]) => {
+        if (!cancelled) {
+          setDbItems(res.items);
+          setDbAudit(audit);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDbItems([]);
+          setDbAudit([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active?.id]);
+
+  const items = useMemo(() => mergeItems(data.questions, dbItems), [data.questions, dbItems]);
+  const audit = useMemo(() => {
+    const merged = [...dbAudit];
+    for (const e of data.audit ?? []) {
+      if (!merged.some((m) => m.id === e.id)) merged.push(e);
+    }
+    return merged;
+  }, [dbAudit, data.audit]);
 
   const flagged = useMemo(() => items.filter((q) => flagsFor(q).length > 0), [items]);
 
@@ -95,10 +183,62 @@ function Review() {
     return q.review === "Rejected";
   });
 
-  const decide = (q: GeneratedQuestion, state: ReviewState) => {
+  const decide = async (q: GeneratedQuestion, state: ReviewState) => {
     setReview(q.id, state, { comment: comments[q.id]?.trim() || undefined, label: q.prompt });
     setComments((c) => ({ ...c, [q.id]: "" }));
-    toast.success(`${state} · recorded in audit history`);
+    if (!active || isMockMode()) return;
+    try {
+      await ReviewService.setState(state, {
+        workspaceId: active.id,
+        itemId: q.id,
+        comment: comments[q.id]?.trim(),
+        label: q.prompt,
+      });
+      const res = await getReviewItems(active.id);
+      setDbItems(res.items);
+      setDbAudit(await ReviewService.auditHistory(active.id));
+      toast.success(`${state} · saved to the backend audit history`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not persist the decision");
+    }
+  };
+
+  const onFlag = async (q: GeneratedQuestion) => {
+    addAudit({
+      itemId: q.id,
+      itemLabel: q.prompt,
+      action: "Flagged",
+      actor: "You",
+      comment: comments[q.id]?.trim() || "Manually flagged for a second opinion",
+    });
+    setComments((c) => ({ ...c, [q.id]: "" }));
+    toast.info("Flagged for a second reviewer");
+    if (!active || isMockMode()) return;
+    try {
+      await ReviewService.flag({
+        workspaceId: active.id,
+        itemId: q.id,
+        comment: comments[q.id]?.trim(),
+        label: q.prompt,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not flag on the backend");
+    }
+  };
+
+  /** Real export through the backend (approved outputs only — the API enforces the gate). */
+  const handleExport = async () => {
+    if (!active || counts.approved === 0) return;
+    try {
+      await ExportService.exportApproved({
+        workspaceId: active.id,
+        format: "json",
+        title: `${active.name} — approved study content`,
+      });
+      toast.success(`Downloading ${counts.approved} approved items`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    }
   };
 
   return (
@@ -108,8 +248,8 @@ function Review() {
       actions={
         <Button
           variant="outline"
-          onClick={() => toast.success(`Exporting ${counts.approved} approved items`)}
-          disabled={counts.approved === 0}
+          onClick={() => void handleExport()}
+          disabled={!active || counts.approved === 0}
         >
           <Download className="size-4" /> Export approved ({counts.approved})
         </Button>
@@ -184,19 +324,8 @@ function Review() {
                       index={i}
                       comment={comments[q.id] ?? ""}
                       onComment={(v) => setComments((c) => ({ ...c, [q.id]: v }))}
-                      onDecide={(s) => decide(q, s)}
-                      onFlag={() => {
-                        addAudit({
-                          itemId: q.id,
-                          itemLabel: q.prompt,
-                          action: "Flagged",
-                          actor: "You",
-                          comment:
-                            comments[q.id]?.trim() || "Manually flagged for a second opinion",
-                        });
-                        setComments((c) => ({ ...c, [q.id]: "" }));
-                        toast.info("Flagged for a second reviewer");
-                      }}
+                      onDecide={(s) => void decide(q, s)}
+                      onFlag={() => void onFlag(q)}
                     />
                   ))}
                 </div>

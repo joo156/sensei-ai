@@ -1,5 +1,6 @@
 /** Generation endpoints (question bank, flashcards, study plan, revision, test help). */
 import { delay, http } from "./http";
+import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import { getWorkspaceData } from "./workspace.api";
 import type {
@@ -18,7 +19,7 @@ const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}`;
 export async function generateQuestions(
   req: GenerateQuestionsRequest,
 ): Promise<GenerateQuestionsResponse> {
-  if (!isMockMode()) return http.post<GenerateQuestionsResponse>("/generate/questions", req);
+  if (!isMockMode()) return http.post<GenerateQuestionsResponse>(paths.generation.questions, req);
   await delay(900);
   const data = await getWorkspaceData(req.workspaceId);
   const questions = data.questions.slice(0, req.count ?? 5);
@@ -35,14 +36,14 @@ export async function generateQuestions(
 export async function generateExam(
   req: GenerateQuestionsRequest,
 ): Promise<GenerateQuestionsResponse> {
-  if (!isMockMode()) return http.post<GenerateQuestionsResponse>("/generate/test-help", req);
+  if (!isMockMode()) return http.post<GenerateQuestionsResponse>(paths.generation.testHelp, req);
   return generateQuestions(req);
 }
 
 export async function generateFlashcards(
   req: GenerateFlashcardsRequest,
 ): Promise<GenerateFlashcardsResponse> {
-  if (!isMockMode()) return http.post<GenerateFlashcardsResponse>("/generate/flashcards", req);
+  if (!isMockMode()) return http.post<GenerateFlashcardsResponse>(paths.generation.flashcards, req);
   await delay(800);
   const data = await getWorkspaceData(req.workspaceId);
   return {
@@ -63,7 +64,7 @@ export async function generateStudyPlan(
 ): Promise<GenerateStudyPlanResponse & { days: StudyPlanDay[] }> {
   if (!isMockMode()) {
     return http.post<GenerateStudyPlanResponse & { days: StudyPlanDay[] }>(
-      "/generate/study-plan",
+      paths.generation.studyPlan,
       req,
     );
   }
@@ -103,7 +104,7 @@ export async function generateRevisionSheet(
 ): Promise<GenerateRevisionSheetResponse & { weakTopics: WeakTopic[] }> {
   if (!isMockMode()) {
     return http.post<GenerateRevisionSheetResponse & { weakTopics: WeakTopic[] }>(
-      "/generate/revision",
+      paths.generation.revision,
       req,
     );
   }

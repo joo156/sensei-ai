@@ -11,6 +11,12 @@ import type { ApiError } from "@/types/api/common";
 
 let accessToken: string | null = null;
 
+/** Maximum time a request may run before it is aborted. */
+const DEFAULT_TIMEOUT_MS = 90_000;
+
+/** Normalized API base URL (no trailing slash) used to build request URLs. */
+const BASE_URL = env.API_BASE_URL.replace(/\/+$/, "");
+
 /** Called by AuthService whenever a session is created/refreshed/cleared. */
 export function setAccessToken(token: string | null) {
   accessToken = token;
@@ -40,12 +46,31 @@ async function request<T>(
     ...((init?.headers as Record<string, string>) ?? {}),
   };
 
-  const res = await fetch(`${env.API_BASE_URL}${path}`, {
-    ...init,
-    method,
-    headers,
-    body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
-  });
+  // When the caller does not manage its own signal, enforce a request timeout
+  // so a stalled backend cannot hang the UI indefinitely.
+  const hasExternalSignal = init?.signal !== undefined;
+  const controller = new AbortController();
+  const timer = hasExternalSignal
+    ? undefined
+    : setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      method,
+      headers,
+      signal: init?.signal ?? controller.signal,
+      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+    });
+  } catch (error) {
+    if (!hasExternalSignal && error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${DEFAULT_TIMEOUT_MS / 1000}s.`);
+    }
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   const payload = res.status === 204 ? null : await res.json().catch(() => null);
 
@@ -66,6 +91,37 @@ export const http = {
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
+  /**
+   * POST a JSON body and receive a binary file (e.g. an exported document) with
+   * the current auth header, returning the Blob and the server filename.
+   */
+  async download(
+    path: string,
+    body?: unknown,
+    init?: RequestInit,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const headers: Record<string, string> = {
+      Accept: "application/octet-stream, application/json",
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...((init?.headers as Record<string, string>) ?? {}),
+    };
+    const res = await fetch(`${BASE_URL}${path}`, {
+      ...init,
+      method: "POST",
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null)) as { error?: ApiError } | null;
+      throw new HttpError(res.status, err?.error?.message ?? res.statusText, err?.error ?? null);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    const match = /filename="?([^";]+)"?/.exec(disposition);
+    const filename = match?.[1] ?? "download";
+    return { blob, filename };
+  },
 };
 
 /** Simulated latency so mock responses behave like real async calls. */

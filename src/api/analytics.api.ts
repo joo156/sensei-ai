@@ -1,5 +1,6 @@
 /** Analytics endpoints. */
 import { delay, http } from "./http";
+import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import {
   activitySeries,
@@ -12,7 +13,7 @@ import type { AnalyticsQuery, AnalyticsResponse } from "@/types/api/analytics.co
 export async function getAnalytics(query: AnalyticsQuery): Promise<AnalyticsResponse> {
   if (!isMockMode()) {
     return http.get<AnalyticsResponse>(
-      `/analytics?workspace_id=${query.workspaceId}&range=${query.range ?? "30d"}`,
+      `${paths.analytics}?workspace_id=${query.workspaceId}&range=${query.range ?? "30d"}`,
     );
   }
   await delay(80);

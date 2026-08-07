@@ -1,17 +1,21 @@
-/** Workspace endpoints. */
-import { delay } from "./http";
-import { supabase } from "@/lib/supabase";
+/** Workspace endpoints.
+ *
+ * Real mode talks to the FastAPI backend (the single source of truth for
+ * workspace records) via the shared `http` client, which attaches the Supabase
+ * access token automatically. Mock mode returns local fixtures.
+ */
+import { delay, http } from "./http";
+import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import { getDocumentsForWorkspaces } from "./document.api";
 import { workspaces as seedWorkspaces } from "@/mock/studio-data";
-import { mockAccounts } from "@/mock/users";
-import { emptyWorkspaceData, workspaceData as seedWorkspaceData } from "@/mock/workspace-data";
 import type { ReviewState, Workspace, WorkspaceAccent, WorkspaceData } from "@/types/domain";
-import type { DbWorkspace, DbWorkspaceWithOwner, ReviewStatus } from "@/types/database.types";
 import type {
-  BootstrapWorkspacesResponse,
   CreateWorkspaceRequest,
   CreateWorkspaceResponse,
+} from "@/types/api/workspace.contracts";
+import type {
+  BootstrapWorkspacesResponse,
   GetWorkspaceResponse,
   GetWorkspacesResponse,
   UpdateWorkspaceRequest,
@@ -19,57 +23,40 @@ import type {
 
 const ACCENTS: WorkspaceAccent[] = ["primary", "info", "success", "warning"];
 
-const REVIEW_STATES: Record<ReviewStatus, ReviewState> = {
+const REVIEW_STATES: Record<string, ReviewState> = {
   pending: "Pending",
   approved: "Approved",
   rejected: "Rejected",
   needs_edit: "Needs Edit",
 };
 
-/** Supabase error → plain Error with a safe fallback message. */
-function toError(error: { message?: string } | null | undefined, fallback: string): Error {
-  return new Error(error?.message ?? fallback);
-}
-
-/** Map a `workspace_with_owner` view row to the UI shape. */
-function mapWorkspace(row: DbWorkspaceWithOwner): Workspace {
-  const accent = ACCENTS.includes(row.accent as WorkspaceAccent)
-    ? (row.accent as WorkspaceAccent)
-    : "primary";
+/**
+ * Map a backend row to the fully-shaped UI model.
+ *
+ * The backend row may be missing the extra read-model fields the UI renders
+ * (`owner`, `generations`, `reviewStatus`, `lastActive`); those are derived
+ * with safe defaults so the backend stays the source of truth.
+ */
+function mapWorkspace(row: Workspace): Workspace {
+  const accent = ACCENTS.includes(row.accent) ? row.accent : "primary";
   return {
-    id: row.id,
-    name: row.name,
-    subject: row.subject,
-    description: row.description || undefined,
-    docs: row.document_count,
-    assets: 0,
-    pendingReview: row.pending_review_count,
-    generations: row.generation_count,
-    reviewStatus: REVIEW_STATES[row.review_status],
-    lastActive: relativeTime(row.updated_at),
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    subject: String(row.subject ?? ""),
+    description: (row.description as string | null) ?? undefined,
+    docs: Number(row.docs ?? 0),
+    assets: Number(row.assets ?? 0),
+    pendingReview: Number(row.pendingReview ?? 0),
+    generations: Number(row.generations ?? 0),
+    reviewStatus: (REVIEW_STATES[String(row.reviewStatus)] ?? "Pending") as ReviewState,
+    lastActive: (row.lastActive as string | undefined) ?? "Just now",
     accent,
     owner: {
-      id: row.owner_id,
-      name: row.owner_name,
-      email: row.owner_email,
+      id: String(row.owner?.id ?? ""),
+      name: (row.owner?.name as string | undefined) ?? "You",
+      email: (row.owner?.email as string | undefined) ?? "",
     },
   };
-}
-
-/** Human "N minutes/hours/days ago" label derived from a row's updated_at. */
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "Just now";
-  const minutes = Math.round((Date.now() - then) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
-  const days = Math.round(hours / 24);
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days} days ago`;
-  const weeks = Math.round(days / 7);
-  return `${weeks} week${weeks === 1 ? "" : "s"} ago`;
 }
 
 export async function getWorkspaces(): Promise<GetWorkspacesResponse> {
@@ -77,30 +64,31 @@ export async function getWorkspaces(): Promise<GetWorkspacesResponse> {
     await delay(60);
     return { workspaces: seedWorkspaces };
   }
-  const { data, error } = await supabase
-    .from("workspace_with_owner")
-    .select("*")
-    .order("created_at", { ascending: true });
-  if (error) throw toError(error, "Could not load your workspaces.");
-  const rows = (data ?? []) as DbWorkspaceWithOwner[];
-  return { workspaces: rows.map(mapWorkspace) };
+  const res = await http.get<GetWorkspacesResponse>(paths.workspaces.list);
+  return { ...res, workspaces: (res.workspaces ?? []).map(mapWorkspace) };
 }
 
 export async function getWorkspace(id: string): Promise<GetWorkspaceResponse> {
   if (isMockMode()) {
     await delay(60);
     const workspace = seedWorkspaces.find((w) => w.id === id) ?? seedWorkspaces[0];
-    return { workspace, data: seedWorkspaceData[id] ?? emptyWorkspaceData() };
+    return {
+      workspace,
+      data: {
+        docs: [],
+        questions: [],
+        flashcards: [],
+        chats: [],
+        history: [],
+        weakTopics: [],
+        audit: [],
+      },
+    };
   }
-  const { data, error } = await supabase
-    .from("workspace_with_owner")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) throw toError(error, "Could not load the workspace.");
-  const row = data as DbWorkspaceWithOwner | null;
-  if (!row) throw new Error("Workspace not found.");
-  return { workspace: mapWorkspace(row), data: emptyWorkspaceData() };
+  return http.get<GetWorkspaceResponse>(paths.workspaces.detail(id)).then((res) => ({
+    ...res,
+    workspace: mapWorkspace(res.workspace!),
+  }));
 }
 
 export function slugifyWorkspaceName(name: string): string {
@@ -114,11 +102,17 @@ export function slugifyWorkspaceName(name: string): string {
 export async function createWorkspace(
   input: CreateWorkspaceRequest,
 ): Promise<CreateWorkspaceResponse> {
-  if (isMockMode()) {
-    await delay(80);
-    const id = slugifyWorkspaceName(input.name) || `workspace-${Date.now()}`;
-    const owner = mockAccounts["student@demo.com"].user;
-    const workspace: Workspace = {
+  if (!isMockMode()) {
+    const res = await http.post<CreateWorkspaceResponse>(paths.workspaces.list, {
+      name: input.name.trim(),
+      description: input.description?.trim() || null,
+    });
+    return { ...res, workspace: mapWorkspace(res.workspace!) };
+  }
+  await delay(80);
+  const id = slugifyWorkspaceName(input.name) || `workspace-${Date.now()}`;
+  return {
+    workspace: {
       id,
       name: input.name.trim(),
       subject: input.description.trim() || "New workspace",
@@ -130,44 +124,8 @@ export async function createWorkspace(
       reviewStatus: "Pending",
       lastActive: "Just now",
       accent: "primary",
-      owner: {
-        id: owner.id,
-        name: owner.name,
-        email: owner.email,
-      },
-    };
-    return { workspace };
-  }
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("You must be signed in to create a workspace.");
-  const now = new Date().toISOString();
-  const { data, error } = await supabase
-    .from("workspaces")
-    .insert({
-      owner_id: user.id,
-      name: input.name.trim(),
-      subject: input.description.trim() || "New workspace",
-      description: input.description.trim(),
-      accent: "primary",
-      created_at: now,
-      updated_at: now,
-    })
-    .select("*")
-    .single();
-  if (error) throw toError(error, "Could not create the workspace.");
-  const row = data as DbWorkspace;
-  return {
-    workspace: mapWorkspace({
-      ...row,
-      owner_name: (user.user_metadata?.full_name as string | undefined) ?? user.email ?? "",
-      owner_email: user.email ?? "",
-      document_count: 0,
-      generation_count: 0,
-      pending_review_count: 0,
-      review_status: "pending",
-    }),
+      owner: { id: "", name: "You", email: "" },
+    } as Workspace,
   };
 }
 
@@ -176,32 +134,64 @@ export async function updateWorkspace({ id, patch }: UpdateWorkspaceRequest): Pr
     await delay(50);
     return;
   }
-  const { error } = await supabase
-    .from("workspaces")
-    .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error) throw toError(error, "Could not update the workspace.");
+  await http.patch<void>(paths.workspaces.detail(id), patch);
+}
+
+export async function deleteWorkspace(id: string): Promise<void> {
+  if (isMockMode()) {
+    await delay(50);
+    return;
+  }
+  await http.delete<void>(paths.workspaces.detail(id));
 }
 
 export async function getWorkspaceData(id: string): Promise<WorkspaceData> {
   const res = await getWorkspace(id);
-  return res.data;
+  return (
+    res.data ?? {
+      docs: [],
+      questions: [],
+      flashcards: [],
+      chats: [],
+      history: [],
+      weakTopics: [],
+      audit: [],
+    }
+  );
 }
 
-/** GET /workspaces/bootstrap — workspaces plus their scoped data in one call. */
+/** GET /workspaces + GET /documents per workspace — the bootstrap payload. */
 export async function getWorkspaceBootstrap(): Promise<BootstrapWorkspacesResponse> {
   if (isMockMode()) {
     await delay(220);
-    const workspaces = seedWorkspaces;
     const store: Record<string, WorkspaceData> = {};
-    for (const w of workspaces) store[w.id] = seedWorkspaceData[w.id] ?? emptyWorkspaceData();
-    return { workspaces, store };
+    for (const w of seedWorkspaces) {
+      store[w.id] = {
+        docs: [],
+        questions: [],
+        flashcards: [],
+        chats: [],
+        history: [],
+        weakTopics: [],
+        audit: [],
+      };
+    }
+    return { workspaces: seedWorkspaces, store };
   }
   const { workspaces } = await getWorkspaces();
-  const docsByWorkspace = await getDocumentsForWorkspaces(workspaces.map((w) => w.id));
+  const ids = workspaces.map((w) => w.id);
+  const docsByWorkspace = await getDocumentsForWorkspaces(ids);
   const store: Record<string, WorkspaceData> = {};
   for (const w of workspaces) {
-    store[w.id] = { ...emptyWorkspaceData(), docs: docsByWorkspace[w.id] ?? [] };
+    store[w.id] = {
+      docs: docsByWorkspace[w.id] ?? [],
+      questions: [],
+      flashcards: [],
+      chats: [],
+      history: [],
+      weakTopics: [],
+      audit: [],
+    };
   }
   return { workspaces, store };
 }

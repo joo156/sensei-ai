@@ -52,8 +52,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setSession(AuthService.restoreSession());
-    setReady(true);
+    let cancelled = false;
+    (async () => {
+      // Wait for the persisted Supabase session to hydrate and load its access
+      // token before declaring the app ready. `ready` therefore means "session
+      // is settled" — an authenticated request can only ever fire with a token.
+      const restored = await AuthService.hydrateSession();
+      if (cancelled) return;
+      setSession(restored);
+      setReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const user = session?.user ?? null;

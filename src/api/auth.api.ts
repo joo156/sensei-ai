@@ -47,8 +47,10 @@ async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
     .eq("id", authUser.id)
     .limit(1)
     .maybeSingle();
-  if (profileRes.error) throw toError(profileRes.error, "Could not load the user profile.");
-  const profile = profileRes.data as DbProfile | null;
+  // A profile/role row may be absent, or RLS may deny the read on a fresh
+  // account. Never let that throw away a valid session: fall back to safe
+  // defaults derived from the verified Supabase user.
+  const profile = profileRes.error == null ? (profileRes.data as DbProfile | null) : null;
 
   const roleRes = await supabase
     .from("user_roles")
@@ -56,8 +58,7 @@ async function mergeUser(authUser: SupabaseUser): Promise<AuthUser> {
     .eq("user_id", authUser.id)
     .limit(1)
     .maybeSingle();
-  if (roleRes.error) throw toError(roleRes.error, "Could not load the user role.");
-  const roleRow = roleRes.data as DbUserRole | null;
+  const roleRow = roleRes.error == null ? (roleRes.data as DbUserRole | null) : null;
 
   const name =
     profile?.full_name || authUser.user_metadata?.name || authUser.email?.split("@")[0] || "User";
