@@ -1,5 +1,6 @@
 /** Model catalogue endpoint. The UI never learns how a model is executed. */
 import { delay, http } from "./http";
+import { paths } from "./paths";
 import { env, isMockMode } from "@/config/env";
 import type { GetModelsResponse, ModelInfo } from "@/types/api/analytics.contracts";
 
@@ -35,7 +36,7 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
 ];
 
 export async function getModels(): Promise<GetModelsResponse> {
-  if (!isMockMode()) return http.get<GetModelsResponse>("/models");
+  if (!isMockMode()) return http.get<GetModelsResponse>(paths.models);
   await delay(30);
   return { models: AVAILABLE_MODELS };
 }

@@ -12,4 +12,5 @@ export { ContentService } from "./ContentService";
 export { NotificationService } from "./NotificationService";
 export { SearchService } from "./SearchService";
 export { ModelService } from "./ModelService";
+export { ExportService } from "./ExportService";
 export * from "./ai/AIProvider";

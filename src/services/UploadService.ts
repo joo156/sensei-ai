@@ -7,13 +7,15 @@
  */
 import * as documentApi from "@/api/document.api";
 import { logger } from "@/lib/logger";
-import type { WsDoc } from "@/types/domain";
+import type { WsChunk, WsDoc } from "@/types/domain";
 
 export interface UploadResult {
   document: WsDoc;
   storagePath: string;
   chunks: number;
   embedded: number;
+  /** Warning when a pipeline stage failed — the upload itself was still saved. */
+  pipelineError?: string;
 }
 
 export const UploadService = {
@@ -45,11 +47,16 @@ export const UploadService = {
 
     let chunkCount = 0;
     let embedded = 0;
+    let pipelineError: string | undefined;
+    let chunked: { documentId: string; chunks: WsChunk[] } = {
+      documentId: stored.id,
+      chunks: [],
+    };
     try {
       onStage?.("parse");
       await UploadService.parse(stored.id);
       onStage?.("chunk");
-      const chunked = await UploadService.chunk(stored.id);
+      chunked = await UploadService.chunk(stored.id);
       chunkCount = chunked.chunks.length;
       if (chunkCount > 0) {
         onStage?.("embed");
@@ -57,6 +64,7 @@ export const UploadService = {
         embedded = result.embedded;
       }
     } catch (error) {
+      pipelineError = error instanceof Error ? error.message : String(error);
       logger.warn(
         "document pipeline enrichment skipped",
         error instanceof Error ? error : new Error(String(error)),
@@ -64,10 +72,15 @@ export const UploadService = {
     }
 
     return {
-      document: stored,
+      document: {
+        ...stored,
+        chunks: chunked.chunks,
+        status: chunkCount > 0 && embedded > 0 ? "Ready" : "Processing",
+      },
       storagePath: storage_path,
       chunks: chunkCount,
       embedded,
+      pipelineError,
     };
   },
 };

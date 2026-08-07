@@ -1,10 +1,12 @@
 /** Review endpoints — approve / reject / needs-edit / comment plus audit trail. */
 import { delay, http } from "./http";
+import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import type { ReviewState } from "@/types/domain";
 import type { WsAuditEntry } from "@/types/domain";
 import type {
   GetAuditHistoryResponse,
+  GetReviewItemsResponse,
   GetReviewQueueResponse,
   ReviewRequest,
   ReviewResponse,
@@ -35,30 +37,48 @@ async function submit(
 }
 
 export const approveGeneration = (req: ReviewRequest, actor = "You") =>
-  submit("/review/approve", req, "Approved", "Approved", actor);
+  submit(paths.review.approve, req, "Approved", "Approved", actor);
 
 export const rejectGeneration = (req: ReviewRequest, actor = "You") =>
-  submit("/review/reject", req, "Rejected", "Rejected", actor);
+  submit(paths.review.reject, req, "Rejected", "Rejected", actor);
 
 export const requestEdits = (req: ReviewRequest, actor = "You") =>
-  submit("/review/needs-edit", req, "Needs Edit", "Needs Edit", actor);
+  submit(paths.review.needsEdit, req, "Needs Edit", "Needs Edit", actor);
 
 export const flagGeneration = (req: ReviewRequest, actor = "System") =>
-  submit("/review/flag", req, "Pending", "Flagged", actor);
+  submit(paths.review.flag, req, "Pending", "Flagged", actor);
 
 export const commentOnGeneration = (req: ReviewRequest, actor = "You") =>
-  submit("/review/comment", req, "Pending", "Comment", actor);
+  submit(paths.review.comment, req, "Pending", "Comment", actor);
 
 export async function getReviewQueue(workspaceId: string): Promise<GetReviewQueueResponse> {
-  if (!isMockMode()) return http.get<GetReviewQueueResponse>(`/review?workspace_id=${workspaceId}`);
+  if (!isMockMode())
+    return http.get<GetReviewQueueResponse>(`${paths.review.queue}?workspace_id=${workspaceId}`);
   const { getWorkspaceData } = await import("./workspace.api");
   const data = await getWorkspaceData(workspaceId);
   return { itemIds: data.questions.filter((q) => q.review === "Pending").map((q) => q.id) };
 }
 
+/** Load generated output items (with content) for a workspace — reload-safe. */
+export async function getReviewItems(workspaceId: string): Promise<GetReviewItemsResponse> {
+  if (!isMockMode())
+    return http.get<GetReviewItemsResponse>(`${paths.review.items}?workspace_id=${workspaceId}`);
+  const { getWorkspaceData } = await import("./workspace.api");
+  const data = await getWorkspaceData(workspaceId);
+  return {
+    items: data.questions.map((q) => ({
+      id: q.id,
+      kind: "question_bank",
+      status: q.review.toLowerCase().replace(" ", "_"),
+      payload: { questions: [q] },
+      created_at: "",
+    })),
+  };
+}
+
 export async function getAuditHistory(workspaceId: string): Promise<GetAuditHistoryResponse> {
   if (!isMockMode()) {
-    return http.get<GetAuditHistoryResponse>(`/review/audit?workspace_id=${workspaceId}`);
+    return http.get<GetAuditHistoryResponse>(`${paths.review.audit}?workspace_id=${workspaceId}`);
   }
   const { getWorkspaceData } = await import("./workspace.api");
   const data = await getWorkspaceData(workspaceId);

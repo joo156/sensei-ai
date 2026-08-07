@@ -1,5 +1,6 @@
 /** Global search endpoint. */
 import { delay, http } from "./http";
+import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import { documents, flashcards, history, questions } from "@/mock/mock-data";
 import type { SearchQuery, SearchResponse } from "@/types/api/catalogue.contracts";
@@ -54,7 +55,7 @@ export async function search(query: SearchQuery): Promise<SearchResponse> {
     if (query.workspaceId) params.set("workspace_id", query.workspaceId);
     if (query.limit) params.set("limit", String(query.limit));
     query.kinds?.forEach((k) => params.append("kinds", k));
-    return http.get<SearchResponse>(`/search?${params.toString()}`);
+    return http.get<SearchResponse>(`${paths.search}?${params.toString()}`);
   }
 
   await delay(240);

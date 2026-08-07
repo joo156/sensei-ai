@@ -14,23 +14,49 @@ import type { AuthUser, Session } from "@/types/api/auth.contracts";
 /** Last known session, kept in memory so restoreSession() stays synchronous. */
 let cachedSession: Session | null = null;
 
-// Supabase's getSession() is async, but AuthContext calls restoreSession()
-// synchronously at boot. Kick the read off here (module load) so the persisted
-// session is cached before the first render's effect runs.
-void (async () => {
+// Supabase's getSession() is async. Kick the persisted-session read off once,
+// here at module load, so rehydration overlaps the first render instead of
+// happening after it. AuthContext awaits `hydrateSession()` (which awaits this
+// bootstrap) before flipping `ready`, so the session and token settle before
+// any authenticated request fires.
+const bootPromise = (async (): Promise<Session | null> => {
   try {
     const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session) return;
+    if (error || !data.session) return null;
     const session = await authApi.mapSession(data.session);
-    if (!session) return;
+    if (!session) return null;
     cachedSession = session;
     setAccessToken(session.access_token);
+    return session;
   } catch {
     /* Supabase not configured yet — app starts signed out. */
+    return null;
   }
 })();
 
+// Keep the HTTP client's token in sync when Supabase refreshes the session in
+// the background (autoRefreshToken) or the user signs in/out elsewhere. Without
+// this, a token renewal would leave the module holding a now-expired access
+// token, producing sporadic 401s on a cold file.
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "SIGNED_OUT") {
+    setAccessToken(session?.access_token ?? null);
+  }
+});
+
 export const AuthService = {
+  /**
+   * Resolve the persisted Supabase session at boot and load its access token
+   * into the HTTP client. Awaiting this guarantees the token is set before the
+   * workspace bootstrap (or any authenticated call) runs.
+   */
+  async hydrateSession(): Promise<Session | null> {
+    const session = await bootPromise;
+    cachedSession = session;
+    setAccessToken(session?.access_token ?? null);
+    return session;
+  },
+
   /**
    * Restore the persisted Supabase session at boot.
    * Synchronous by design: the value is hydrated from `supabase.auth.getSession()`.

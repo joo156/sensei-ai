@@ -76,12 +76,18 @@ function nowStamp() {
  * Keeps the provider itself free of any mock/seed import.
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, ready } = useAuth();
   const queryClient = useQueryClient();
   const { data, isPending, error, refetch } = useServiceQuery(
     ["workspace-bootstrap", user?.id ?? null],
     () => WorkspaceService.bootstrap(),
-    { refetchOnWindowFocus: true },
+    {
+      refetchOnWindowFocus: true,
+      // Never fire the authenticated request until the session is restored AND
+      // a user is present; otherwise we'd send a tokenless 401 up front. The
+      // bootstrapping is keyed on the user id once the session settles.
+      enabled: ready && !!user?.id,
+    },
   );
 
   // Realtime: when a workspace row the current user can see changes, refresh
@@ -99,6 +105,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       void supabase.removeChannel(channel);
     };
   }, [user, queryClient]);
+
+  // Signed out: don't hit the API. Give the tree an empty store so the routes
+  // below can render, and let a RoleGate redirect to /login.
+  if (ready && !user) {
+    return (
+      <WorkspaceStore seedWorkspaces={[]} seedStore={{}}>
+        {children}
+      </WorkspaceStore>
+    );
+  }
 
   if (isPending) {
     return (

@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { BackendStatus } from "@/components/app/BackendStatus";
 import { RoleGate } from "@/components/app/RoleGate";
 import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { Button } from "@/components/ui/button";
@@ -110,6 +111,10 @@ function StudentHome() {
         <NoActiveWorkspace />
       ) : (
         <>
+          {/* Backend / auth connection proof (real API probes) */}
+          <div className="mb-6">
+            <BackendStatus />
+          </div>
           {/* Continue studying */}
           <section className="surface-card overflow-hidden">
             <div className="mesh-bg grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">

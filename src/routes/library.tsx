@@ -102,7 +102,13 @@ function Library() {
       for (const file of Array.from(files)) {
         const result = await UploadService.ingest(active.id, file);
         await addDoc(result.document);
-        toast.success(`Uploaded “${file.name}” to ${activeName}`);
+        if (result.pipelineError) {
+          toast.warning(
+            `Uploaded “${file.name}” but text extraction was skipped: ${result.pipelineError}`,
+          );
+        } else {
+          toast.success(`Uploaded “${file.name}” to ${activeName}`);
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed. Please try again.");

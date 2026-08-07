@@ -1,0 +1,605 @@
+===============================================================================
+PHASE 8 FRONTEND ANALYSIS
+===============================================================================
+Sensei-AI  (TanStack Start / React 19 / TypeScript frontend)
+Audit prepared as a read-only engineering review of the frontend against the
+backend (ai-content-agents, FastAPI / Phase 8) which is treated as the source
+of truth. Reference documents read: PHASE8_BACKEND_PROGRESS.txt,
+PHASE8_BACKEND_ANALYSIS.txt, backend/* routers+schemas, Sensei docs/*
+(BACKEND_CONTRACT.md, FASTAPI_INTEGRATION.md, FRONTEND_ARCHITECTURE.md,
+SUPABASE_INTEGRATION.md, DATABASE_SCHEMA.md). NO frontend code was modified.
+
+Repos:
+  backend  : /Users/mac/Desktop/ai-content-agents  (source of truth)
+  frontend : /Users/mac/Desktop/Sensei-AI          (this audit)
+
+Verification performed during this review:
+  * npx tsc --noEmit                  -> 0 errors (strict TS passes)
+  * npx eslint .                      -> 0 errors, 13 warnings (react-refresh)
+  * package.json has NO test script; no *.test / *.spec files in src.
+
+===============================================================================
+1. EXECUTIVE SUMMARY
+===============================================================================
+Sensei-AI is a large, well-structured, mock-first prototype of a "production
+quality" TanStack Start (SSR) grounded-AI study app. The engineering hygiene
+is genuinely high: a clean service/api layering rule, zero TODO/FIXME markers,
+strict TypeScript that passes, near-uniform AsyncState loading/error/empty
+primitives, role-gating, and a thoughtfully documented contract surface
+(docs/BACKEND_CONTRACT.md, docs/FASTAPI_INTEGRATION.md, src/types/api/*,
+src/api/paths.ts).
+
+The critical finding is that the frontend is NOT actually wired end-to-end to
+the Phase 8 FastAPI backend. In its default, most-complete mode, the app runs
+entirely from src/mock. When VITE_ENABLE_MOCK=false is set against a live
+backend, the app becomes a broken hybrid:
+
+  * Authentication, workspaces, documents (list/upload/create/delete) go
+    through SUPABASE (src/lib/supabase.ts transpiled at env-time), while
+    generation/chat/review/search/parse/chunk/embed/notes call the FASTAPI
+    backend through src/api/http.ts. The two backends are independent and
+    share no identity or data, so real mode cannot function as a coherent
+    product.
+  * The FastAPI backend's own auth scaffold (POST /auth/*, M1) is never called
+    by the frontend; the frontend sends a SUPABASE Bearer token, which the
+    backend's get_current_user (backend/deps.py) rejects with 401. The two
+    auth systems are mutually incompatible until the backend's Supabase-JWT
+    milestone lands.
+  * Several backend milestones have NO frontend consumer: review workflow
+    (M7) is implemented entirely in WorkspaceContext/setReview (local state),
+    export (M8) has no frontend module at all (only toast() stubs), and
+    history/analytics/models/catalogue/agents/pipeline/notifications point at
+    endpoints the backend does not implement.
+
+The right way to read this repo is: a "frontend-ready" prototype whose
+service/API layer is designed to accept either a mock or a real backend, but
+whose real-mode wiring is currently split-brain and unintegrated with the
+Phase 8 backend. It is not production-ready for live-backend use; it is an
+excellent high-fidelity mock / demo app with a clear path toward integration.
+
+Phase-status (from PHASE8_BACKEND_PROGRESS.txt M0..M11) vs frontend:
+  M0  Scaffold      -> ✅  Supported (TanStack Start app boots, routes, SSR)
+  M1  Auth          -> 🟡  Frontend uses SUPABASE, NOT the backend /auth.
+  M2  Workspaces    -> 🟡  Frontend uses SUPABASE, NOT FastAPI /workspaces.
+  M3  Documents     -> 🟡  Hybrid/broken in real-mode (split storage).
+  M4  Retrieval     -> 🟡  search.api targets FastAPI /search but disk is empty.
+  M5  Generation    -> 🟡  generation.api targets FastAPI /generate/*; shapeOK.
+  M6  Chat          -> ✅  chat.api targets FastAPI /chats,/mentor/chat,/concept.
+  M7  Review        -> ❌  UI drives WorkspaceContext/setState, not /review.
+  M8  Export        -> ❌  No export service/route/types; toast() stubs only.
+  M9  Analytics     -> 🟡  UI exists; /analytics NOT implemented in backend.
+  M10 Catalogue      -> 🟡  /search present; /agents,/pipeline,/notifications
+                          ,/catalogue have NO backend router.
+  M11 Final integ.  -> ❌  Not attempted; real-mode is non-functional.
+Detailed per-milestone marks are in section 8.
+
+===============================================================================
+2. FOLDER ARCHITECTURE REVIEW
+===============================================================================
+Layer model (matches docs/FRONTEND_ARCHITECTURE.md and AGENTS.md rules):
+  component -> hook/context -> Service -> *.api.ts -> (mock | http / supabase)
+
+folder/review:
+- src/routes/        File-based TanStack router pages. 13 feature routes +
+                     __root, index (landing), sitemap. All import services,
+                     never src/api or src/mock directly. GOOD.
+- src/components/
+    ui/              shadcn Radix primitives (sidebar, dialog, tabs, ...).
+                     Standard, generated, thin.
+    app/             Feature components (AppShell, AsyncState, InteractiveQuiz,
+                     FlashcardDeck, QuestionCard, badges, ModelSelector,
+                     GlobalSearch, Pipeline, ...).
+- src/contexts/       AuthContext, WorkspaceContext, NotificationContext.
+                     State ownership of user/workspace/notify.
+- src/hooks/          useServiceQuery (Result-bridge to TanStack Query),
+                     usePermissions (DEAD - see §11), use-mobile.
+- src/services/       15 service singletons + ai/AIProvider abstraction.
+                     The intended single swap seam. Well respected by routes.
+- src/api/            paths.ts (path registry) + http.ts client + domain api
+                     modules. Historical issue: auth/workspace/document
+                     real-mode uses SUPABASE, not these FastAPI paths.
+- src/types/          domain.ts (render shapes), api/*.contracts.ts (API
+                     contracts), database.types.ts (Supabase snake_case schema).
+- src/mock/           4 seed modules that back all api functions in mock mode.
+- src/lib/            result.ts envelope, supabase.ts singleton, logger,
+                     errorReporter, workspace helpers.
+- src/config/env.ts    Vite env reading (see §3 footgun).
+- src/constants/       roles/permissions/storage keys + generation kinds.
+- src/start.ts/server.ts  TanStack Start server entry with CSRF + error
+                     middlewares; sitemap route.
+
+Assessment: architecture is arguably the strongest part of the repo. The
+separation of "service seam" is real and consistent. The dominant weakness is
+that the api layer has drifted to TWO backends (Supabase + FastAPI) without a
+clear contract, which the service seam now hides rather than resolves.
+
+===============================================================================
+3. API LAYER REVIEW  (src/api/*)
+===============================================================================
+3.1 paths.ts                     — single, documented path registry. GOOD.
+3.2 http.ts                      — the ONLY network client. Bearer header is a
+        single module-level `accessToken`; unwraps `{data}` envelopes; error
+        shaping to HttpError with `.body` = {code,message,details}. 90s timeout
+        (recently reworked, uncommitted). GOOD. Weaknesses:
+          * No automatic 401 -> refresh/retry; a 401 surfaces as an error.
+          * No retry on transient network failures.
+          * "Content-Type": application/json set even for bodies that are
+            already strings; benign.
+3.3 auth.api.ts      — SUPABASE-based (signInWithPassword, getUser, refresh,
+        profiles/user_roles merge). The FastAPI /auth/* endpoints in
+        backend/auth are NEVER invoked. RED FLAG (see §5).
+3.4 workspace.api.ts — REAL-mode uses Supabase (workspace_with_owner view,
+        workspaces table); the FastAPI /workspaces/* router is unused. Also
+        imports mock seeds (studio-data, users, workspace-data) for mock mode.
+3.5 document.api.ts  — HYBRID. uploadDocument/createDocument/getDocuments/
+        getDocumentsForWorkspaces/deleteDocument -> SUPABASE (documents table +
+        storage bucket). parse/chunk/embed/chunks/notes -> http (FastAPI
+        /documents/{id}/...). This is split-brain storage for the same entity.
+3.6 search.api.ts    — http -> GET /search (FastAPI M4). GOOD parity of
+        query params (q, workspace_id, limit, kinds).
+3.7 generation.api.ts– http -> FastAPI /generate/*. PAYLOAD SHAPE MISMATCHES
+        (see §4.5). Revision response adds `weakTopics`; study-plan response
+        adds `days` — none present in the contract types.
+3.8 chat.api.ts    — http -> FastAPI. getChats returns UNTYPED http.get (no
+        generic). getChatsResponse is not imported/typed.
+3.9 review.api.ts   — http -> FastAPI /review/*. Dead: no UI calls these.
+3.10 history.api.ts / analytics.api.ts / model.api.ts / catalogue.api.ts —
+        http -> (paths.history,/analytics,/models,/agents,/pipeline,/notifications,
+        /catalogue). For EACH of these the backend main.py mounts NO such
+        router (see §6). So in real-mode each of these 404s.
+3.11 Envelope: client handles {data:T} or bare T; backend returns bare T for
+        success. OK. Errors: contract {error:{...}} mapped to HttpError.body.
+        NonJSON error bodies fall back to status only. OK.
+3.12 conflict: `isMockMode()` returns `env.ENABLE_MOCK || env.API_BASE_URL
+        === "/api"`. With env default left as "/api" (i.e., no VITE_API_BASE_URL
+        set), the app silently stays in mock mode even if VITE_ENABLE_MOCK=false.
+        A footgun that can hide an unintegrated build.
+3.13 duplicated `toError(...)` in 4 api modules (document, workspace, auth) +
+        http.HttpError: two competing error shapes. (list in §11).
+
+===============================================================================
+4. ROUTING REVIEW
+===============================================================================
+- Protocol: TanStack Router, file-based, SSR via TanStack Start. routeTree.gen
+  is in sync with files. GOOD.
+- Against protected routes: protection is composed per-route through
+  <RoleGate> + createFileRoute component. AppShell does NOT gate; it renders.
+  There is NO global/route "if not authed -> redirect to /login" guard in
+  __root.tsx. A stale client-side route bypass is possible only if a page
+  is not wrapped; today every app page is wrapped so behavior is correct,
+  but the pattern is not enforced (defense in depth missing).
+- homeForRole() (constants) routes student->/home, reviewer->/review,
+  admin->/admin. Consistent.
+- sitemap[.]xml BASE_URL is "" (empty) so emitted <loc> are relative/invalid;
+  also omits /workspace,/settings,/studio,/admin,/chat.
+- 404 (NotFoundComponent) + error boundary (ErrorComponent) in __root.tsx are
+  solid; error-reporting to BackendErrorReporter wired.
+
+===============================================================================
+5. COMPONENT ARCHITECTURE REVIEW
+===============================================================================
+- Overwhelmingly presentational; feature logic lives in services/contexts.
+  Compliant with AGENTS.md (no route imports src/api or src/mock).
+- High value primitives: AsyncState (Loading/Error/Empty/AsyncSection/NoActiveWorkspace),
+  RoleGate, badges, ModelSelector, CitationChip.
+- Notable duplicate/hardcoded logic in view layer (business rules escaped the
+  service layer; see §10):
+   * review.tsx re-hosts the full "validation" rule (flags: grounding<98,
+     quality<8.5, weak citations, duplicate distractor) client-side.
+   * library.tsx fabricates whole WsDoc objects for text-note creation
+     (fake size/pages/chunks) instead of a service call.
+   * studio.tsx + generate.tsx build chat/history/request records locally and
+     persist through context (addChat/appendChatMessage/addHistory), bypassing
+     any service/API call.
+   * admin.tsx, analytics.tsx, pipeline.tsx, generate.tsx all render LITERAL
+     fake stat values ("480 questions", "98.4% grounding", "83% coverage",
+     "990 chunks") that are never sourced from fetched data.
+   * Export buttons are toast() stubs in review/library/history/generate.
+- Unused/dead components (imported nowhere): RagFlow.tsx (slug), OutputCard.tsx,
+  StatusBadge.tsx (used only by OutputCard). See §11.
+- Accessibility arc: role="status" with aria-live on Loading, role="alert" on
+  errors; buttons mostly labellable. Not fully audited for keyboard/no-JS.
+
+===============================================================================
+6. STATE MANAGEMENT REVIEW
+===============================================================================
+- TanStack Query (ReactingQuery) is present and used for READ paths through
+  useQuery + unraw(), user/(workspace-bootstrap, analytics, catalogue, agents,
+  notifications, plus useQuery for other apis).
+- Only ONE useMutation in the whole app (NotificationCenter markAllRead).
+  Everything else (generation, chat, review) uses imperative async-await
+  + local mutable context state. Query cache invalidation is scoped to
+  workspace-bootstrap + notifications.
+- WorkspaceContext owns all writes: setReview/addDoc/updateDoc/addChat/
+  addHistory etc. — purely in-memory + localStorage (workspaceState key). It
+  does NOT persist to any backend. In "real mode" this means review decisions,
+  chat, history, notes, approvals NEVER leave the browser.
+- localStorage PersistShape restores per-workspace draft state keyed by
+  conflict-safe storage keys. Server list is authoritative. Reasonable, but it
+  is explicitly NOT a backend persistence story.
+- Result<T> envelope (lib/result.ts) -> refund for EVERY service, Services
+  "never throw". Good, uniform.
+
+===============================================================================
+7. FEATURE-BY-FEATURE AUDIT
+===============================================================================
+Each feature rated against the backend (source of truth).
+
+7.1 Authentication                     [PARTIAL / SPLIT]
+  - Supabase account selector + login page driven by AuthService/auth.api.
+    DEMO_ACCOUNTS = AuthService.demoAccounts() returns [] when NOT in Supabase
+    (it returns [] in mock/non-mock). But the login page maps DEMO_ACCOUNTS
+    and shows nothing; in Supabase mode also [] , so the "demo account" buttons
+    are empty. (mock/users.ts is used by workspace.api only, not login).
+  - Backend has FastAPI /auth/* (M1 scaffold). Front end never calls them.
+    => Two incompatible identity systems. Blocking integration item.
+
+7.2 Workspaces                          [PARTIAL — SPLIT]
+  - create/list/get/update via Supabase workspace tables. FastAPI /workspaces
+    unused. Workspace accents partially migrate: Supabase accent is null|string
+    mapped in workspace.api to accent "primary" fallback while UI uses RGBA.
+  - WorkspaceService.bootstrap+ localStorage persistence works offline.
+
+7.3 Document upload                    [PARTIAL — SPLIT between Supabase+FastAPI]
+  - upload: document.api.upload via Supabase storage + createDocument via
+    documents table; parse/chunk/embed via FastAPI http. Backend /upload (the
+    sole authoritative POST /upload contract) is NOT called. In real mode the
+    FastAPI DB has no row, so parse 404s.
+
+7.4 Document list / preview           [PARTIAL]
+  - Listing via Supabase (getDocuments). Preview: library.tsx + workspace.tsx
+    drill-down read from context data. Chunks via FastAPI (only fetch when
+    NOT mock). Since backend DB is empty, lists/chunks return empty.
+
+7.5 Search / Grounded search           [PARTIAL / M10]
+  - GlobalSearch (AppShell) + search.ts -> FastAPI /search?q&workspace_id&
+    &kinds. Good signature match. But workspace index is empty (no files ever
+    landed in FastAPI/Chroma), so returns []. Also search kinds "question/
+    flashcard/concept/history" are, by M4, never produced by backend (only
+    "document"); the search.ts mock expands all kinds, real backend only docs.
+
+7.6 Question generation                [PARTIALLY EXISTS]
+  - generate.ts + studio "Question Bank" + InteractiveQuiz. Uses
+    generation.api -> /generate/questions. Request type
+    GenerateQuestionsRequest: count?, difficulty?, types?, model, options{}
+    per backend. Test help passes options.durationMinutes via generateExam.
+    Path is correct; see §9.2-9.3 for value-space notes.
+
+7.7 Test Help                          [EXISTS]
+  - studio "Test Help" -> generation.api.generateExam -> /generate/test-help
+    (+options.durationMinutes). Backend expects options.durationMinutes. OK.
+
+7.8 Flashcards                         [EXISTS]
+  - studio Flashcards + FlashcardDeck -> /generate/flashcards. Backend has
+    count; frontend type GenerateFlashcardsRequest count?. OK. citations
+    returned? Backend WsFlashcard {front,back} no citations. OK.
+
+7.9 Study Plan                         [EXISTS + MISMATCH]
+  - generateStudyPlan -> /generate/study-plan (+{days,hoursPerDay}) backend
+    supports days/hoursPerDay. CONTRACT MISMATCH: types/api/generation.
+    contracts.ts GenerateStudyPlanRequest only declares weeks/hoursPerWeek;
+    the days/hoursPerDay are reloaded via inline intersection in generation.
+    api — a stopgap. Response type omits days, but api returns &{days:Study
+    PlanDay[]}. Contract file is incomplete.
+
+7.10 Revision sheet                    [EXISTS + MISMATCH]
+   - generateRevisionSheet -> /generate/revision -> &{weakTopics}. Backend
+     returns weakTopics. Contract GenerateRevisionSheetResponse omits
+     weakTopics. Same stopgap-intersection pattern. Incomplete contract file.
+
+7.11 Mentor chat                        [EXISTS]
+   - studio "Mentor" → ChatService.send(kind:'mentor') → /mentor/chat. Good.
+
+7.12 Concept Explanation chat          [EXISTS]
+   - studio "Concept" → ChatService.send(kind:'concept') → /concept/chat. Good.
+
+7.13 Review Queue                      [MISSING wiring]
+   - review.tsx page implements UI (approve/reject/needs-edit/audit). But data
+     source is WorkspaceContext (local questions/audits). It NEVER calls
+     ReviewService (grep: ReviewService only used internally in
+     ReviewService.ts setState; not reachable from routes). The FastAPI /review
+     endpoints exist but are unused. In mock mode you see canned local data;
+     in real mode it reads Supabase/state and no /review calls fire.
+
+7.14 Approval workflow                 [MISSING / UI-only local]
+   - setReview in WorkspaceContext flips review field + addAudit locally.
+     No persistence, no server gate, no approval corporate flow. Asynche
+     (no SSE, no job status), no 429 handling.
+
+7.15 Approval (exports)                [MISSING]
+   - No ExportService/export.api/console routing/export types. "Export
+     approved", "Export CSV" and Generate "Export" buttons are toast stubs.
+     Backend /exports (M8) exists but is never called.
+
+7.16 History                           [MISSING/STUB]
+   - history.ts + routes list from WorkspaceContext data.history; "Export CSV"
+     is a no-op toast(). history.api targets /history which backend does not
+     implement. History rows written locally by addHistory.
+
+7.17 Settings                          [MISSING]
+   - settings.tsx is fully static: local useState, "Save" is a toast. No
+     preferences/profile read or update is wired to any API. No backend /profile
+     or /preferences endpoint exists either.
+
+7.18 Mentor chat (persisted)            [PARTIAL]
+   - createChat/appendChat messages stored via context; no backend chat
+     write. chat.api getChats -> backend /chats but unused by the UI.
+
+7.19 Review queue / audit               [as above: local]
+
+===============================================================================
+8. BACKEND INTEGRATION AUDIT (M1..M11)
+===============================================================================
+Compare PHASE8_BACKEND_PROGRESS.txt milestones with corresponding frontend.
+
+M0 FastAPI scaffold        ✅ INTEGRATED    (TanStack Start app boots/routes/SSR)
+M1 Auth                    🟡 PARTIAL. Supabase-based; /auth unused/conflict
+M2 Workspaces              🟡 PARTIAL. Supabase-based; /workspaces unused
+M3 Documents               🟡 PARTIAL. Supabase+FastAPI split; non-functional
+                                              real mode
+M4 Retrieval               🟡 PARTIAL. /search exists+wired; index empty; kinds
+                                              M4 only doc-kind
+M5 Generation              ✅ INTEGRATED. /generate/* wired; contract-shape
+                                              mismatches noted in §9.4-9.5
+M6 Chat                    ✅ FULLY INTEGRATED /chats,/mentor,/concept
+M7 Review                  ❌ MISSING. /review UI present but backend never called
+M8 Export                  ❌ MISSING. No export module; Toast()-stubs only
+M9 Analytics (Future)      🟡 OutOfScope. UI present; no backend; hardcoded
+dashboard stats
+M10 Catalogue (M4 search)  🟡 PARTIAL. /search wired; /agents,/pipeline,
+                                               /notifications,/catalogue absent
+M11 Final Integration      ❌ MISSING. two-backend split; not runnable end-to-end.
+
+===============================================================================
+9. TYPESCRIPT CONTRACT AUDIT (frontend contracts vs backend Pydantic)
+===============================================================================
+Contract files / Pydantic end match for the fields that exist. Notable mismatches:
+
+9.1 Review / audit
+  - domain.ReviewState = "Pending"|"Approved"|"Needs Edit"|"Rejected" (title).
+  - backend returns OutputStatus.value = "pending"/"edited"/"approved"/"rejected"
+    (lowercase). Contract ReviewResponse.status is typed ReviewState (title
+    case) so "approved" is not assignable to "Approved", and there is no TS
+    member for the backend's "edited" value. MISMATCH. (Note: the UI concept
+    "Needs Edit" maps to backend status "edited", not "Needs Edit".)
+  - WsAuditEntry.action (domain) = "Approved"/"Rejected"/... (title).
+    Backend returns ReviewAction.value "approve"/"edit"/"reject"/"comment".
+    MISMATCH (values differ in case and wording).
+  - review.action BACKEND BUG: backend action_map map uses ReviewAction.NEEDS_EDIT
+    and ReviewAction.FLAG members that DO NOT EXIST on ReviewAction enum
+    (src/validation/review_schema.py has only approve/edit/reject/comment) —
+    so review needs-edit and flag endpoints will 500. Any frontend integration
+    of those two actions will be blocked until backend fixes the enum.
+
+9.2 GeneratedQuestion
+  - TS QuestionType = "MCQ"|"True/False"|"Short Answer"; backend default
+    type string "MCQ". difficulty default "Intermediate". bloom "Understanding".
+    review: TS ReviewState; backend GeneratedQuestion.review="Pending" (title,
+    backend hardcodes "Pending"). OK for now but the value space does not
+    reflect the backend's lowercase output statuses.
+
+9.3 GeneratedQuestion options/answer
+  - TS Difficulty = Beginner/Intermediate/Advanced matches backend defaults.
+  - Backend GeneratedQuestion carries defaults (quality=9.0, grounded=100.0,
+    estMinutes=2, citations=[]) that the TS domain type requires explicitly.
+    Compatible, but the TS side has no defaults, so rendering code must handle
+    missing values if the backend ever omits them.
+
+9.4 Study plan response
+  - TS GenerateStudyPlanResponse type: only {sections[]}. Backend returns
+    {summary, sections, days}. Frontend response type omits days; the api
+    layer re-augments it inline with &{days: StudyPlanDay[]} instead of
+    declaring days in the contract file.
+
+9.5 Revision response
+  - TS GenerateRevisionSheetResponse type: only {sections[]}. Backend returns
+    {summary, sections, weakTopics}. Frontend &{weakTopics}. stale contract.
+
+9.6 Chat
+  - Client Api of /mentor returns ChatCitation {docId,docTitle,page?,snippet};
+    backend matches. OK.
+  - getChats unttyped; ChatSummary vs WsChat domain fit.
+
+9.7 Search
+  - SearchQuery/SearchResponse vs backend. `kinds` limited list. Backend only
+    emits document kind. OK for M4.
+
+9.8 Comments
+  - ReviewRequest/ReviewResponse match backend request shape
+    {workspaceId,itemId,comment,label}. OK.
+
+9.9 Models
+  - ModelInfo.ts vs backend /models: backend has NO /models endpoint. Purely
+    aspirational client constant.
+
+9.10 HISTORY / ANALYTICS / CATALOGUE contract types
+   - These are client-only today; not implemented/typed by backend.
+
+===============================================================================
+10. MISSING FEATURES (from the backend/product contract)
+===============================================================================
+10.1 Export single/approved items to JSON/CSV/Markdown/PDF — none.
+10.2 Export history — none.
+10.3 Any real "approve/reject/needs-edit" input that goes to /review — none.
+10.4 Auto-flag wired to a backend validation response — none (client-side only).
+10.5 409/429 handling with retry/backoff per BACKEND_CONTRACT.
+10.6 401 auto-refresh loop / token handling (http.ts sets token but no global
+     refresh on 401).
+10.7 Job/streaming for long generations (e.g. question bank 4-40 questions) —
+     no progress bar/SSE; just a busy spinner.
+10.8 Upload size guard — Settings.max_upload_bytes (default 50MB) enforces a
+     413 on the backend, but the UI copy says "up to 100 MB" and there is no
+     client-side enforcement; the Supabase storage path uploads directly
+     without a pre-flight size check.
+10.9 Real "approval gate export": would be a workflow that reads
+     ReviewService / ExportsService — none.
+
+===============================================================================
+11. TECHNICAL DEBT
+===============================================================================
+11.1 Dead/reachable-only modules (unreferenced):
+    - src/components/app/RagFlow.tsx     (plus pipeline rag-stages fan-out)
+    - src/components/app/OutputCard.tsx
+    - src/components/app/StatusBadge.tsx (only consumed by OutputCard)
+    - src/hooks/usePermissions.ts
+    - src/components/app/agent-icons.ts
+    - AIProvider export listProviders (no consumer)
+11.2 Duplicated helpers:
+    - toError(...) identical in document.api, workspace.api, auth.api (~30
+      sites). Move to http.ts.
+    - newId(uuid-producing) repeated in generation.api, document.api,
+      chat.api, review.api, workspace.api, library.tsx (6 different datetime
+      formats) — one helper desired.
+11.3 Duplicate business-logic in views:
+    - review.tsx flagValidations
+    - studio.tsx / generate.tsx chat+history record builders
+    - hardcoded metrics in admin/analytics/pipeline (ad-hoc stat cards)
+    - toast()-as-export stubs (review, history, generate)
+11.4 Hardcoded values:
+    - library.tsx copy "up to 100 MB" vs env (500MB); note bytes uses 100K rule
+    - listing size "100 MB" in upload panel.
+    - ModelSelector MODELS = static; model.api getModels never
+      called (real-mode also fails as /models missing); getDefaultModelId().
+    - automation of analytics ranges "$30d" hardcoded; admin/analytics casts.
+    - sitemap BASE_URL "".
+    - home.tsx lunchroom static "Favorite flashcards" and "Last message".
+11.5 Concurrency / mutation: only 1 useMutation; all writes are imperative.
+11.6 env isMockMode footgun (§3.12).
+11.7 auth in real mode impossible (two auth systems).
+11.8 Supabase/Duplicates: .env.local is committed (anon key) — a
+     publishable key, ok-by-design, but note the anon key is present in
+     repo .env.local. Not a secret (anon), but ensure no service key.
+11.9 No backend `analytics/history/models/catalogue/agents/pipeline/notifications`
+   endpoints despite frontend .api calling them -> 404s in real mode.
+11.10 getChats is untyped; Document /list in real-mode uses Supabase
+    (storage.mirror), not backend /domain; prone to drift.
+
+===============================================================================
+12. DOCUMENTATION MISMATCHES
+===============================================================================
+12.1 BACKEND_CONTRACT.md documents  POST /auth/login, GET /auth/me, PATCH
+      /workspaces, POST /upload, GET /documents as FastAPI. The shipped code
+      (auth.api/workspace.api/document.api) no longer calls these; it uses
+      Supabase. docs are out-of-date relative to code.
+12.2 SUPABASE_INTEGRATION.md / DATABASE_SCHEMA.md describe the intended
+      Postgres schema; this differs from the FastAPI SQLite (ingestion.db)
+      store that the backend actually uses. Two schemas coexist with no single
+      source of truth.
+12.3 paths.ts comment claims it is "single source of truth", but real-mode
+      workspace/document/auth bypass paths.ts (Supabase direct) and settings.
+12.4 src/types/api/*.contracts.ts claim to be the contract but several now
+      don't match the backend types (study plan days, revision weakTopics) and
+      are then re-augmented inline in the .api layer (studyPlan). The contracts
+      should instead be detailed enough to mirror Pydantic.
+12.5 Storage "uploads up to 200MB" (index README) vs Settings.max_upload_bytes
+      default 50MB / MAX_UPLOAD_BYTES documented in BACKEND_CONTRACT 413. The
+      landing says "up to 200 MB per file" but backend enforces 50MB default.
+12.6 The README "Backlog readiness" says flipping VITE_ENABLE_MOCK=false needs
+      NO frontend refactor; this is not true — the current split means a real
+      run is broken end-to-end.
+
+===============================================================================
+13. RECOMMENDED IMPROVEMENTS (ordered by priority)
+===============================================================================
+HIGH (blocking true integration):
+ R1 Decide on a single persistence + identity contract. Two viable end-states:
+    (a) Fully FastAPI: frontend should route auth/workspace/document through
+        paths.ts + http.ts (drop Supabase real branches), store an access_token
+        from backend /auth login, and ensure backend's deps.get_current_user
+        validates that token.
+    (b) Fully Supabase: implement the Supabase-JWT verification on the backend
+        (deps.py get_current_user) so the backend accepts a Supabase access
+        token; keep Supabase for workspaces/documents/storage, and make the
+        FastAPI generation/chat/review/search services read Supabase documents
+        (or ingest into the same store). Today neither path works end-to-end.
+ R2. Wire "Approval" + Export. Real /review approve/reject/needs-edit/flag calls
+     via ReviewService; stand up an ExportService + export/route using
+     /exports; remove toast()-stubs.
+ R3. Align contract types to Pydantic (review status/action case + "edited",
+     study-plan "days", revision "weakTopics") and stop augmenting via inline
+     intersections in .api.ts.
+ R4. Fix consensus / "review" for real data: remove hardcoded stat cards
+    (admin/analytics/pipeline) and bind to real data or live metrics.
+ R5. Handle 401-refresh + 409/429 backoff in http.ts per BACKEND_CONTRACT.
+
+MEDIUM:
+ M1. De-duplicate toError/newId/... helpers; delete dead code (§list).
+ M2. Remove "missing backend" catalogues: only call /catalogue,/agents,
+     pipeline,/notifications pending backend endpoints; prefer mock-off flags.
+ M3. Guard profile AuthContext with a redirect on protected leafV. Add a router
+     CAD "requiresAuth" in __root.
+ M4. Client-side 50MB (100MB?) enforce in UploadService mapped to
+     max_upload_bytes so a giant file doesn't reach backend.
+ M5. Replace hardcoded status/**Text** copy with `formatError`/date helpers
+     to keep it consistent with backend enums.
+ M6. Migrate write paths (chat/review/history/notes) from WorkspaceContext to
+     service/useMutation so real back-end mutations go through the seam.
+ M7. Add a smoke test harness (no test script today) + a real "mock-flip" CI
+     job that runs with VITE_ENABLE_MOCK=false against a test backend to prevent
+     broken split-brain wiring from regressing.
+
+LOW:
+ L1. Remove dead RagFlow/OutputCard/StatusBadge/usePermissions/agent-icons.
+ L2. Fix sitemap BASE_URL and route coverage.
+ L3. Centralize ID generation.
+ L4. Public anon key is fine but keep it out of committed .env.local if team
+      policy requires.
+
+===============================================================================
+14. PRODUCTION-READINESS SCORE
+===============================================================================
+CRITERION                         SCORE (1-10)   NOTES
+Architecture                      8              Layered, clean seams
+Maintainability                   7              Except some dead code + utils
+Scalability                     4              Client-side context state;
+                                                no server round-trip
+Performance                    6              SSR; but mock/JSON data
+                                                hydrating; heavy shadcn bundle
+                                                not tree-shaken
+Accessibility                      5              aria-live on primitives but no
+                                                full keyboard audit; no
+                                                aria-describedby on form fields
+Security                           5              CSP not set; anon key in VCS;
+                                                no token refresh; no open
+                                                redirect guard on login
+Responsiveness                     7              responsive layout app-shell;
+                                                motion/vanilla; mobile sheet
+Testing readiness                  2              NO test framework, NO tests
+Deployment readiness               4              SSR config present; real data
+                                                fails; env split-brain
+Code quality                       7        Zero TODO, eslint clean (13 warn),
+                                                but hardcoded stat cards &
+                                                duplicated helpers
+Documentation                      6              Good docs but BACKEND_CONTRACT
+                                                & contract types now stale
+
+OVERALL FRONTEND PRODUCTION-READINESS SCORE: 5.5 / 10
+
+===============================================================================
+15. FINAL VERDICT
+===============================================================================
+The Sensei-AI frontend is an impressively architected, aesthetically-polished,
+strongly-typed prototype that is fully functional in its default mock mode.
+As a real product integrated against the Phase 8 backend with production
+habits (tokens, persistence, export, review-gate, retries,
+testing), it is NOT production-ready and is NOT currently wired to the backend.
+
+The single most important finding is that the frontend's real-mode is a
+split-backend hybrid: identity + workspaces + document storage live in Supabase,
+while generation/chat/review/search/pipeline read from a separate FastAPI build
+whose SQLite/Chroma store is empty and whose document store `ingestion.db`
+knows nothing about supabase-created ids. No real-mode end-to-end flow is
+programmed today; uploading a file in real mode stores it in Supabase and then
+fails to parse in FastAPI; logging in issues a valid session but the backend
+rejects the bearer token because the two auth systems are different.
+
+Until the team picks exactly ONE identity+storage stratum and rewires the
+service/API layer to it (Option (a) or (b) in R1), flips VITE_ENABLE_MOCK=false
+as a genuine integration gate, adds the missing review->export persistence,
+fixes the contract-type mismatches, and adds a real test suite, the project
+belongs in the "high-fidelity demo / Phase-8 frontend-ready" category rather
+than "production". If integration proceeds, prioritize R1-R5; the remaining
+work is well-scoped and the codebase is clean enough to absorb it.
+
+END OF PHASE 8 FRONTEND ANALYSIS
+===============================================================================

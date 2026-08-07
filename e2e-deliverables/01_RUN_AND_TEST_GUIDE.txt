@@ -1,0 +1,73 @@
+SENSEI AI — REAL BACKEND END-TO-END: RUN & TEST GUIDE
+=====================================================
+App layout
+  - Backend API (FastAPI):          /Users/mac/Desktop/ai-content-agents   -> port 8000
+  - Frontend (Vite React):          /Users/mac/Desktop/Sensei-AI           -> port 8080
+
+STEP 1 — Install / sanity (one time)
+  cd /Users/mac/Desktop/ai-content-agents
+  cp .env.example .env                 # fills in LITELLM + SUPABASE placeholders
+  .venv/bin/python -m pip install -r requirements.txt   (if venv missing: python -m venv .venv)
+
+STEP 2 — Start the backend (localhost:8000)
+  cd /Users/mac/Desktop/ai-content-agents
+  rm -f ingestion.db                  # OPTIONAL: resets SQLite so migrations rebuild clean
+  export SUPABASE_URL=https://idaruqyrselcgtswzmkz.supabase.co
+  export SUPABASE_JWT_SECRET=phase8-e2e-secret-0000   # enables LOCAL HS256 JWT verify
+  export PLATFORM_DB_PATH=ingestion.db
+  export CHROMA_DIR=.chroma
+  export DEFAULT_MODEL=gemini/gemini-flash-lite-latest
+  export LITELLM_BASE_URL=https://learner-os.sprints.ai/litellm
+  export LITELLM_API_KEY=<your-litellm-key>            # REQUIRED for real generation
+  nohup .venv/bin/python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 &
+  curl http://127.0.0.1:8000/health      # expect 200
+
+STEP 3 — Start the frontend (localhost:8080)
+  cd /Users/mac/Desktop/Sensei-AI
+  cat > .env.local <<'EOF'
+  VITE_API_BASE_URL=http://localhost:8000
+  VITE_SUPABASE_URL=https://<your-project>.supabase.co
+  VITE_SUPABASE_ANON_KEY=<valid-anon-key>   # see NOTE below
+  EOF
+  npm install
+  npm run dev        # serves on :8080
+
+  NOTE on the anon key (IMPORTANT):
+    The anon key committed in .env/.env.local is INVALID/REVOKED for the real
+    Supabase project -> GoTrue returns 401 {"message":"Invalid API key"}.
+    Two options:
+      (a) put a VALID project anon key into VITE_SUPABASE_ANON_KEY, OR
+      (b) keep the backend in "local HS256" mode and sign a JWT yourself:
+            python - <<'PY'
+            import sys; sys.path.insert(0,'backend')
+            from backend.auth.jwt import encode_hs256
+            print(encode_hs256({"sub":"u1","email":"you@x.com","name":"You"},
+                  "phase8-e2e-secret-0000", issuer="https://<proj>.supabase.co/auth/v1", audience="authenticated"))
+            # place the printed token into the browser/curl Authorization: Bearer <tok>
+            PY
+
+NOW TEST EVERY FEATURE (click through the UI at http://localhost:8080)
+  1. Login        -> any valid session/JWT; backend returns a fresh Bearer token (200).
+  2. Workspace    -> "New workspace", create/rename/delete a workspace; it persists
+                     (POST/PATCH/DELETE /workspaces).
+  3. Upload       -> drop a .txt/.pdf into the workspace; watch the parse->chunk->embed
+                     chain (POST /upload). Document appears in the Library.
+  4. Search       -> type a phrase from your uploaded file; filtered chunks return
+                     (GET /search?q=&workspace_id=) with scored matches.
+  5. Generate     -> pick a document, select "Questions", press generate. With a valid
+                     LITELLM_API_KEY you get grounded questions with citations and a
+                     groundingInfo "100%" / score. (Without a valid key -> the LiteLLM
+                     401, or a content-dependency "manual grounding error".)
+  6. Review       -> Review tab lists pending items (GET /review/items); Approve /
+                     Reject updates the persisted status + audit history; approving an
+                     already-rejected item returns a clean 409 illegal_transition.
+  7. Export       -> Export approved items to CSV/JSON. An UNapproved/un-ended item is
+                     blocked with 403 not_exportable; approved content is exported.
+
+KNOWN EXTERNAL BLOCKERS (not resolvable from source)
+  - Supabase login: anon key invalid/revoked for real project (see NOTE above).
+  - LiteLLM generation: proxy token must be valid (401 "token_not_found_in_db")
+    -> hangs/flaky; the same key returned grounding=100 in one run then 401 the next.
+  - Generation grounding guard is content/query dependent: some texts trigger
+    "InsufficientGroundingError" (unanswerable query) -> returns HTTP 500 instead of
+    a clean 4xx. Pre-existing baseline, unaffected by this work.
