@@ -41,6 +41,7 @@ import { GenerationService } from "@/services/GenerationService";
 import { ChatService } from "@/services/ChatService";
 import { HistoryService } from "@/services/HistoryService";
 import type { WsDoc } from "@/types/domain";
+import type { ChatCitation } from "@/types/domain";
 import type { GeneratedQuestion } from "@/types/domain";
 
 export const Route = createFileRoute("/studio")({
@@ -679,7 +680,18 @@ function ChatPanel({
     let id = chatId;
 
     if (!id) {
-      id = ChatService.createChatId();
+      const created = await ChatService.createChat({
+        workspaceId: workspace.id,
+        kind: agent.id === "concept" ? "concept" : "mentor",
+        title: q.slice(0, 48),
+        model,
+      });
+      if (!created.success) {
+        setBusy(false);
+        notify.fromError(created.error, "Could not start chat");
+        return;
+      }
+      id = created.data.chatId;
       addChat({
         id,
         title: q.slice(0, 48),
@@ -738,7 +750,10 @@ function ChatPanel({
             </div>
           ) : (
             <div key={i} className="surface-card max-w-[85%] p-3 text-sm">
-              {m.text}
+              <div className="whitespace-pre-wrap">{m.text}</div>
+              {m.citations && m.citations.length > 0 && (
+                <MessageReferences citations={m.citations} />
+              )}
             </div>
           ),
         )}
@@ -772,6 +787,38 @@ function ChatPanel({
 }
 
 /* ---------------- Shared UI ---------------- */
+
+function MessageReferences({ citations }: { citations: ChatCitation[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "border-border text-muted-foreground inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors hover:border-primary/40 hover:text-primary",
+          open && "border-primary/40 text-primary",
+        )}
+      >
+        <BookOpen className="size-3.5" />
+        {open ? "Hide references" : `Show references (${citations.length})`}
+      </button>
+      {open && (
+        <div className="border-border mt-2 space-y-2 border-l-2 pl-3">
+          {citations.map((c, i) => (
+            <div key={`${c.docId}-${i}`} className="text-xs leading-relaxed">
+              <p className="text-primary font-semibold">
+                {c.docTitle}
+                {c.page ? ` · p.${c.page}` : ""}
+              </p>
+              <p className="text-muted-foreground line-clamp-3">{c.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function ControlsCard({
   title,

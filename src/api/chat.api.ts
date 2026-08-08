@@ -2,6 +2,7 @@
 import { delay, http } from "./http";
 import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
+import type { WsChat } from "@/types/domain";
 import type {
   ConceptChatRequest,
   ConceptChatResponse,
@@ -51,8 +52,9 @@ export async function generateConceptResponse(
   return mockAnswer(req, context);
 }
 
-export async function getChats(workspaceId: string) {
-  if (!isMockMode()) return http.get(`${paths.chat.chats}?workspace_id=${workspaceId}`);
+export async function getChats(workspaceId: string): Promise<{ chats: WsChat[] }> {
+  if (!isMockMode())
+    return http.get<{ chats: WsChat[] }>(`${paths.chat.chats}?workspace_id=${workspaceId}`);
   const { getWorkspaceData } = await import("./workspace.api");
   const data = await getWorkspaceData(workspaceId);
   return { chats: data.chats };

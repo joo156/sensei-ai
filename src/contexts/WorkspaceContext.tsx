@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 import { isMockMode } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
-import { DocumentService, WorkspaceService } from "@/services";
+import { DocumentService, HistoryService, WorkspaceService } from "@/services";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
 import type {
@@ -317,6 +317,9 @@ function WorkspaceStore({
       addHistory: (row) => {
         if (!active) return;
         mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] }));
+        void HistoryService.append(active.id, row).catch((err) =>
+          logger.warn("Failed to persist history row", err),
+        );
       },
     };
   }, [activeId, queryClient, setActive, store, mutate, workspaces]);

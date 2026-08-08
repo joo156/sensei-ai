@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Check, Copy, Heart, RefreshCw, ShieldCheck, X } from "lucide-react";
+import { Check, Copy, Eye, Heart, PenLine, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -22,7 +22,11 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [fav, setFav] = useState(false);
+  const [boxOpen, setBoxOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [showAnswer, setShowAnswer] = useState(false);
 
+  const isShortAnswer = q.type === "Short Answer";
   const options = q.options ?? [q.answer, "True", "False"].slice(0, 2);
   const correct = picked === q.answer;
 
@@ -31,6 +35,14 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
       `Q${index + 1}. ${q.prompt}\nAnswer: ${q.answer}\n${q.rationale}`,
     );
     toast.success("Question copied");
+  };
+
+  const reset = () => {
+    setPicked(null);
+    setChecked(false);
+    setBoxOpen(false);
+    setShowAnswer(false);
+    setDraft("");
   };
 
   return (
@@ -52,80 +64,114 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
 
       <h3 className="mt-3 text-[15px] leading-relaxed font-medium">{q.prompt}</h3>
 
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-        {options.map((opt) => {
-          const isPicked = picked === opt;
-          const isCorrect = opt === q.answer;
-          const state =
-            checked && isCorrect
-              ? "correct"
-              : checked && isPicked && !isCorrect
-                ? "wrong"
-                : isPicked
-                  ? "picked"
-                  : "idle";
-          return (
-            <li key={opt}>
-              <button
-                disabled={checked}
-                onClick={() => setPicked(opt)}
-                className={cn(
-                  "flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-all",
-                  state === "idle" && "border-border hover:border-primary/40 hover:bg-muted/40",
-                  state === "picked" && "border-primary bg-primary/10",
-                  state === "correct" && "border-success bg-success/10 text-foreground",
-                  state === "wrong" && "border-destructive bg-destructive/10 text-foreground",
+      {isShortAnswer ? (
+        <div className="mt-4 space-y-3">
+          {!boxOpen ? (
+            <button
+              type="button"
+              onClick={() => setBoxOpen(true)}
+              className="border-border flex w-full items-center gap-2.5 rounded-xl border border-dashed px-3 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/40"
+            >
+              <PenLine className="size-4 shrink-0" />
+              <span>Write your answer</span>
+              <span className="ml-auto text-[11px] font-medium">Tap to open</span>
+            </button>
+          ) : (
+            <div>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Think it through and type your answer here…"
+                rows={3}
+                className="border-border bg-muted/40 w-full resize-y rounded-xl border p-3 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none"
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {!showAnswer ? (
+                  <Button size="sm" onClick={() => setShowAnswer(true)}>
+                    <Eye className="size-3.5" /> Show answer
+                  </Button>
+                ) : (
+                  <span className="border-success/30 bg-success/10 border border-success/30 rounded-xl px-3 py-2 text-sm">
+                    <span className="text-success text-[11px] font-semibold tracking-widest uppercase">
+                      Expected answer
+                    </span>
+                    <span className="text-foreground mt-0.5 block">{q.answer}</span>
+                  </span>
                 )}
-              >
-                <span
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+          {options.map((opt) => {
+            const isPicked = picked === opt;
+            const isCorrect = opt === q.answer;
+            const state =
+              checked && isCorrect
+                ? "correct"
+                : checked && isPicked && !isCorrect
+                  ? "wrong"
+                  : isPicked
+                    ? "picked"
+                    : "idle";
+            return (
+              <li key={opt}>
+                <button
+                  disabled={checked}
+                  onClick={() => setPicked(opt)}
                   className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                    state === "correct" && "border-success bg-success text-success-foreground",
-                    state === "wrong" &&
-                      "border-destructive bg-destructive text-destructive-foreground",
-                    state === "picked" && "border-primary bg-primary text-primary-foreground",
-                    state === "idle" && "border-border",
+                    "flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left text-sm transition-all",
+                    state === "idle" && "border-border hover:border-primary/40 hover:bg-muted/40",
+                    state === "picked" && "border-primary bg-primary/10",
+                    state === "correct" && "border-success bg-success/10 text-foreground",
+                    state === "wrong" && "border-destructive bg-destructive/10 text-foreground",
                   )}
                 >
-                  {state === "correct" ? (
-                    <Check className="size-3" />
-                  ) : state === "wrong" ? (
-                    <X className="size-3" />
-                  ) : (
-                    ""
-                  )}
-                </span>
-                <span className="flex-1">{opt}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
+                      state === "correct" && "border-success bg-success text-success-foreground",
+                      state === "wrong" &&
+                        "border-destructive bg-destructive text-destructive-foreground",
+                      state === "picked" && "border-primary bg-primary text-primary-foreground",
+                      state === "idle" && "border-border",
+                    )}
+                  >
+                    {state === "correct" ? (
+                      <Check className="size-3" />
+                    ) : state === "wrong" ? (
+                      <X className="size-3" />
+                    ) : (
+                      ""
+                    )}
+                  </span>
+                  <span className="flex-1">{opt}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {!checked ? (
-          <Button size="sm" onClick={() => setChecked(true)} disabled={!picked}>
-            Check answer
-          </Button>
-        ) : (
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
-              correct ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
-            )}
-          >
-            {correct ? <Check className="size-3.5" /> : <X className="size-3.5" />}
-            {correct ? "Correct" : `Answer: ${q.answer}`}
-          </span>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => {
-            setPicked(null);
-            setChecked(false);
-          }}
-        >
+        {!isShortAnswer &&
+          (!checked ? (
+            <Button size="sm" onClick={() => setChecked(true)} disabled={!picked}>
+              Check answer
+            </Button>
+          ) : (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                correct ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
+              )}
+            >
+              {correct ? <Check className="size-3.5" /> : <X className="size-3.5" />}
+              {correct ? "Correct" : `Answer: ${q.answer}`}
+            </span>
+          ))}
+        <Button size="sm" variant="ghost" onClick={reset}>
           <RefreshCw className="size-3.5" /> Retry
         </Button>
         <Button size="sm" variant="ghost" onClick={() => toast.info("Regenerating this question…")}>
@@ -148,7 +194,7 @@ function QuizItem({ q, index }: { q: GeneratedQuestion; index: number }) {
       </div>
 
       <AnimatePresence>
-        {checked && (
+        {(checked || (isShortAnswer && showAnswer)) && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}

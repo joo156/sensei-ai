@@ -114,11 +114,20 @@ export interface WsDoc {
   sizeBytes?: number;
 }
 
+export interface ChatCitation {
+  docId: string;
+  docTitle: string;
+  page?: number;
+  snippet: string;
+}
+
 export interface WsChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
   time: string;
+  /** Chunks the assistant reply was grounded on (present on chat replies). */
+  citations?: ChatCitation[];
 }
 
 export interface WsChat {
