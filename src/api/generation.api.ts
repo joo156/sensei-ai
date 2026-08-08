@@ -4,6 +4,8 @@ import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import { getWorkspaceData } from "./workspace.api";
 import type {
+  FlashcardTopicsRequest,
+  FlashcardTopicsResponse,
   GenerateFlashcardsRequest,
   GenerateFlashcardsResponse,
   GenerateQuestionsRequest,
@@ -46,10 +48,30 @@ export async function generateFlashcards(
   if (!isMockMode()) return http.post<GenerateFlashcardsResponse>(paths.generation.flashcards, req);
   await delay(800);
   const data = await getWorkspaceData(req.workspaceId);
+  const cards = data.flashcards.slice(0, req.count ?? 6);
   return {
     generationId: newId("gen"),
     kind: "flashcards",
-    flashcards: data.flashcards.slice(0, req.count ?? 6),
+    flashcards: cards.map((c, i) => ({
+      front: c.front,
+      back: c.back,
+      format: req.cardFormat ?? "term-definition",
+      topic: req.topic && req.topic !== "All chapters" ? req.topic : undefined,
+      sourceChunkId: undefined,
+      citations: [],
+    })),
+  };
+}
+
+export async function getFlashcardTopics(
+  req: FlashcardTopicsRequest,
+): Promise<FlashcardTopicsResponse> {
+  if (!isMockMode()) {
+    return http.post<FlashcardTopicsResponse>(paths.generation.flashcardTopics, req);
+  }
+  await delay(300);
+  return {
+    topics: ["Data types", "Variables & scope", "Control flow", "Functions", "OOP basics"],
   };
 }
 

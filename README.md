@@ -129,6 +129,78 @@ npm run lint       # ESLint + Prettier check
 npm run format     # Prettier write
 ```
 
+## Running the full app (backend + frontend)
+
+Sensei is two processes: the **FastAPI backend** (`ai-content-agents`, port
+`8000`) and this **frontend** (Vite, port `8080`). The frontend talks to the
+backend through `src/api/http.ts` (see `VITE_API_BASE_URL`). The backend is not
+a service — it must be started manually, and it stops on laptop shutdown.
+
+### One command
+
+```bash
+./start-dev.sh           # start backend + frontend together
+./start-dev.sh status    # show what is running
+./start-dev.sh stop      # stop both
+```
+
+Run `./start-dev.sh` once after every laptop restart. If you see
+**"Unable to load your workspaces · Load failed"**, the backend is down — that
+is the fix.
+
+- Frontend → http://localhost:8080
+- Backend health → http://127.0.0.1:8000/health
+- Logs → `ai-content-agents/server.log` (backend), `dev.log` (frontend)
+
+Ports are configurable: `BACKEND_PORT=9000 FRONTEND_PORT=3000 ./start-dev.sh`.
+
+### Manual start (two terminals)
+
+```bash
+# Terminal 1 — backend
+cd ~/Desktop/ai-content-agents
+.venv/bin/python -c "
+import os
+from dotenv import load_dotenv
+load_dotenv('.env', override=False)
+os.environ.pop('SUPABASE_JWT_SECRET', None)
+import uvicorn
+uvicorn.run('backend.main:app', host='127.0.0.1', port=8000)
+"
+
+# Terminal 2 — frontend
+cd ~/Desktop/Sensei-AI
+npm run dev
+```
+
+The backend loads `.env` itself by absolute path, so it works from any
+directory. `SUPABASE_JWT_SECRET` is dropped so access tokens are verified
+through Supabase GoTrue instead of local HS256 (required for login).
+
+### First-time setup
+
+```bash
+# Backend
+cd ~/Desktop/ai-content-agents
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp .env.example .env        # then fill in LITELLM_API_KEY, LITELLM_BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY
+
+# Frontend (this repo)
+cd ~/Desktop/Sensei-AI
+npm install
+cp .env.example .env.local  # then set VITE_API_BASE_URL=http://localhost:8000 and VITE_ENABLE_MOCK=false
+```
+
+### Troubleshooting
+
+| Symptom                                  | Cause                          | Fix                                  |
+| ---------------------------------------- | ------------------------------ | ------------------------------------ |
+| "Unable to load your workspaces / Load failed" | Backend not running (common after reboot) | `./start-dev.sh`              |
+| Login fails / 401 "Invalid or expired token"    | `SUPABASE_JWT_SECRET` leaked into env, or wrong Supabase URL/anon key | Use `./start-dev.sh` (it drops the secret); check `.env` |
+| Generation shows placeholder text        | Backend serving test doubles   | Check `SENSEI_USE_TEST_DOUBLES` is unset; restart backend |
+| Port 8000/8080 already in use            | Another process is listening    | `./start-dev.sh stop`, then start again |
+
 ## Backend readiness
 
 This repository is a **frontend-ready** build. The service/API layer is

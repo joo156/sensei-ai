@@ -1,15 +1,26 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Heart, RotateCw, Shuffle } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  RotateCw,
+  Shuffle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Citation } from "@/types/domain";
 
 export interface Flashcard {
   id: string;
   front: string;
   back: string;
   topic?: string;
+  format?: string;
+  citations?: Citation[];
 }
 
 export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
@@ -116,11 +127,15 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
               Click or press Space to flip
             </span>
           </div>
-          <div className="surface-card absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
+          <div className="surface-card absolute inset-0 flex flex-col gap-4 overflow-y-auto p-8 text-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
             <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">
               {mode === "quiz" ? "Answer" : "Back"}
+              {current.format ? ` · ${current.format}` : ""}
             </span>
             <p className="text-xl leading-relaxed">{current.back}</p>
+            {current.citations && current.citations.length > 0 && (
+              <CardReferences citations={current.citations} />
+            )}
           </div>
         </motion.button>
       </div>
@@ -156,6 +171,38 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
         {hard.size} marked difficult · {favs.size} favorited · Spaced repetition prioritises
         difficult cards next session
       </p>
+    </div>
+  );
+}
+
+function CardReferences({ citations }: { citations: Citation[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-auto w-full border-t pt-3 text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "border-border text-muted-foreground inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors hover:border-primary/40 hover:text-primary",
+          open && "border-primary/40 text-primary",
+        )}
+      >
+        <BookOpen className="size-3.5" />
+        {open ? "Hide sources" : `Show sources (${citations.length})`}
+      </button>
+      {open && (
+        <div className="border-border mt-2 max-h-40 space-y-2 overflow-y-auto border-l-2 pl-3">
+          {citations.map((c, i) => (
+            <div key={`${c.chunk ?? c.doc}-${i}`} className="text-xs leading-relaxed">
+              <p className="text-primary font-semibold">
+                Source · {c.chunk ?? c.doc.slice(0, 8)}
+                {c.page ? ` · p.${c.page}` : ""}
+              </p>
+              <p className="text-muted-foreground line-clamp-3">{c.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

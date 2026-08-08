@@ -9,6 +9,8 @@ import * as chatApi from "@/api/chat.api";
 import * as generationApi from "@/api/generation.api";
 import type { MentorChatRequest, MentorChatResponse } from "@/types/api/chat.contracts";
 import type {
+  FlashcardTopicsRequest,
+  FlashcardTopicsResponse,
   GenerateFlashcardsRequest,
   GenerateFlashcardsResponse,
   GenerateQuestionsRequest,
@@ -29,6 +31,7 @@ export interface AIProvider {
   generateQuestions(req: GenerateQuestionsRequest): Promise<GenerateQuestionsResponse>;
   generateExam(req: GenerateQuestionsRequest): Promise<GenerateQuestionsResponse>;
   generateFlashcards(req: GenerateFlashcardsRequest): Promise<GenerateFlashcardsResponse>;
+  flashcardTopics(req: FlashcardTopicsRequest): Promise<FlashcardTopicsResponse>;
   generateStudyPlan(
     req: GenerateStudyPlanRequest & { days?: number; hoursPerDay?: number },
   ): ReturnType<typeof generationApi.generateStudyPlan>;
@@ -47,6 +50,7 @@ function createProvider(id: string, label: string, vendor: string): AIProvider {
     generateQuestions: (req) => generationApi.generateQuestions({ ...req, model: id }),
     generateExam: (req) => generationApi.generateExam({ ...req, model: id }),
     generateFlashcards: (req) => generationApi.generateFlashcards({ ...req, model: id }),
+    flashcardTopics: (req) => generationApi.getFlashcardTopics({ ...req, model: id }),
     generateStudyPlan: (req) => generationApi.generateStudyPlan({ ...req, model: id }),
     generateRevisionSheet: (req) => generationApi.generateRevisionSheet({ ...req, model: id }),
     mentorChat: (req, ctx) => chatApi.generateMentorResponse({ ...req, model: id }, ctx),

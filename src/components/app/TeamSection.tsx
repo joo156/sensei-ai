@@ -87,120 +87,110 @@ export function TeamSection({ id = "team" }: { id?: string }) {
         </motion.div>
 
         <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {TEAM.map((m, i) => {
+            const isMentor = m.role === "Technical Leads & Project Mentors";
 
-{TEAM.map((m, i) => {
-  const isMentor = m.role === "Technical Leads & Project Mentors";
-
-  return (
-    <motion.article
-      key={m.name}
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ delay: i * 0.07, duration: 0.45, ease: "easeOut" }}
-      whileHover={{ y: -6 }}
-      className="surface-card hover:border-primary/40 hover:shadow-elevated group relative overflow-hidden p-6 transition-all"
-    >
-      {isMentor ? (
-        <>
-          {/* Special mentor glow */}
-          <span className="bg-primary/10 pointer-events-none absolute -top-16 -right-16 size-40 rounded-full blur-2xl" />
-          <span className="bg-primary/5 pointer-events-none absolute -bottom-16 -left-16 size-32 rounded-full blur-2xl" />
-
-          <div className="relative">
-            {/* Mentor badge */}
-            <div className="mb-5 flex items-center gap-2">
-              <span className="bg-primary/10 text-primary inline-flex size-9 items-center justify-center rounded-xl">
-                <Sparkles className="size-4" />
-              </span>
-
-              <div className="min-w-0">
-                <p className="text-primary text-[10px] font-bold uppercase tracking-widest">
-                  Technical Mentors
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  Project Leadership
-                </p>
-              </div>
-            </div>
-
-            {/* Mentor names */}
-            <h3 className="text-sm font-semibold leading-snug">
-              {m.name}
-            </h3>
-
-            <p className="text-primary mt-1 text-xs font-medium">
-              {m.role}
-            </p>
-
-            <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
-              {m.contribution}
-            </p>
-
-            <div className="text-muted-foreground mt-4 flex items-center text-xs">
-              <span className="border-primary/20 bg-primary/5 text-primary rounded-full border px-2 py-0.5">
-                {m.focus}
-              </span>
-            </div>
-          </div>
-        </>
-      ) : (
-        <>
-          <span className="bg-primary/8 pointer-events-none absolute -top-16 -right-16 size-40 rounded-full opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
-
-          <div className="flex items-center gap-3">
-            <motion.span
-              whileHover={{ rotate: -6, scale: 1.06 }}
-              className="bg-primary text-primary-foreground shadow-glow flex size-12 items-center justify-center rounded-2xl text-sm font-bold"
-            >
-              {m.initials}
-            </motion.span>
-
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold">{m.name}</h3>
-              <p className="text-primary truncate text-xs font-medium">
-                {m.role}
-              </p>
-            </div>
-          </div>
-
-          <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
-            {m.contribution}
-          </p>
-
-          <div className="text-muted-foreground mt-4 flex items-center gap-3 text-xs">
-            <span className="border-border rounded-full border px-2 py-0.5">
-              {m.focus}
-            </span>
-
-            <span className="ml-auto flex items-center gap-1.5">
-              <a
-                href={m.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${m.name} on LinkedIn`}
-                className="border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 inline-flex size-7 items-center justify-center rounded-lg border transition-all hover:-translate-y-0.5"
+            return (
+              <motion.article
+                key={m.name}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ delay: i * 0.07, duration: 0.45, ease: "easeOut" }}
+                whileHover={{ y: -6 }}
+                className="surface-card hover:border-primary/40 hover:shadow-elevated group relative overflow-hidden p-6 transition-all"
               >
-                <Linkedin className="size-3.5" />
-              </a>
+                {isMentor ? (
+                  <>
+                    {/* Special mentor glow */}
+                    <span className="bg-primary/10 pointer-events-none absolute -top-16 -right-16 size-40 rounded-full blur-2xl" />
+                    <span className="bg-primary/5 pointer-events-none absolute -bottom-16 -left-16 size-32 rounded-full blur-2xl" />
 
-              <a
-                href={m.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`${m.name} on GitHub`}
-                className="border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 inline-flex size-7 items-center justify-center rounded-lg border transition-all hover:-translate-y-0.5"
-              >
-                <Github className="size-3.5" />
-              </a>
-            </span>
-          </div>
-        </>
-      )}
-    </motion.article>
-  );
-})}
+                    <div className="relative">
+                      {/* Mentor badge */}
+                      <div className="mb-5 flex items-center gap-2">
+                        <span className="bg-primary/10 text-primary inline-flex size-9 items-center justify-center rounded-xl">
+                          <Sparkles className="size-4" />
+                        </span>
 
+                        <div className="min-w-0">
+                          <p className="text-primary text-[10px] font-bold uppercase tracking-widest">
+                            Technical Mentors
+                          </p>
+                          <p className="text-muted-foreground text-xs">Project Leadership</p>
+                        </div>
+                      </div>
+
+                      {/* Mentor names */}
+                      <h3 className="text-sm font-semibold leading-snug">{m.name}</h3>
+
+                      <p className="text-primary mt-1 text-xs font-medium">{m.role}</p>
+
+                      <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
+                        {m.contribution}
+                      </p>
+
+                      <div className="text-muted-foreground mt-4 flex items-center text-xs">
+                        <span className="border-primary/20 bg-primary/5 text-primary rounded-full border px-2 py-0.5">
+                          {m.focus}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="bg-primary/8 pointer-events-none absolute -top-16 -right-16 size-40 rounded-full opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100" />
+
+                    <div className="flex items-center gap-3">
+                      <motion.span
+                        whileHover={{ rotate: -6, scale: 1.06 }}
+                        className="bg-primary text-primary-foreground shadow-glow flex size-12 items-center justify-center rounded-2xl text-sm font-bold"
+                      >
+                        {m.initials}
+                      </motion.span>
+
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold">{m.name}</h3>
+                        <p className="text-primary truncate text-xs font-medium">{m.role}</p>
+                      </div>
+                    </div>
+
+                    <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
+                      {m.contribution}
+                    </p>
+
+                    <div className="text-muted-foreground mt-4 flex items-center gap-3 text-xs">
+                      <span className="border-border rounded-full border px-2 py-0.5">
+                        {m.focus}
+                      </span>
+
+                      <span className="ml-auto flex items-center gap-1.5">
+                        <a
+                          href={m.linkedin}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${m.name} on LinkedIn`}
+                          className="border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 inline-flex size-7 items-center justify-center rounded-lg border transition-all hover:-translate-y-0.5"
+                        >
+                          <Linkedin className="size-3.5" />
+                        </a>
+
+                        <a
+                          href={m.github}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${m.name} on GitHub`}
+                          className="border-border text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 inline-flex size-7 items-center justify-center rounded-lg border transition-all hover:-translate-y-0.5"
+                        >
+                          <Github className="size-3.5" />
+                        </a>
+                      </span>
+                    </div>
+                  </>
+                )}
+              </motion.article>
+            );
+          })}
 
           <motion.div
             initial={{ opacity: 0, y: 24 }}

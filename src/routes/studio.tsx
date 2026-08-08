@@ -377,11 +377,40 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
   const notify = useNotify();
   const log = useGenerationLog();
   const [topic, setTopic] = useState("All chapters");
+  const [topics, setTopics] = useState<string[]>([]);
+  const [format, setFormat] = useState<"term-definition" | "qa">("term-definition");
   const [count, setCount] = useState(6);
   const [busy, setBusy] = useState(false);
   const [deck, setDeck] = useState<Flashcard[] | null>(null);
 
+  // Keep the topic selector in sync with the PDF: topics are extracted from
+  // the indexed document chunks, exactly like the Streamlit UI does. If the
+  // extraction returns nothing we fall back to "All chapters".
+  useEffect(() => {
+    let cancelled = false;
+    if (!workspace || !doc) {
+      setTopics([]);
+      setTopic("All chapters");
+      return;
+    }
+    setTopics([]);
+    setTopic("All chapters");
+    GenerationService.flashcardTopics({
+      workspaceId: workspace.id,
+      documentId: doc,
+      model,
+    }).then((res) => {
+      if (cancelled) return;
+      if (res.success) setTopics(res.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.id, doc, model]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!workspace) return null;
+
+  const topicOptions = ["All chapters", ...topics];
 
   const generate = async () => {
     setBusy(true);
@@ -392,6 +421,7 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
       model,
       count,
       topic,
+      format,
     });
     if (!res.success) {
       setBusy(false);
@@ -409,11 +439,12 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Flashcards controls" onGenerate={generate} busy={busy}>
         <SegmentedField
-          label="Topic"
-          value={topic}
-          onChange={setTopic}
-          options={["All chapters", "Data types", "Functions", "OOP"]}
+          label="Card format"
+          value={format}
+          onChange={(v) => setFormat(v as "term-definition" | "qa")}
+          options={["term-definition", "qa"]}
         />
+        <SegmentedField label="Topic" value={topic} onChange={setTopic} options={topicOptions} />
         <SliderField
           label="Card count"
           value={count}
@@ -482,7 +513,7 @@ function StudyPlanPanel({ model, doc }: { model: ModelId; doc: string }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Study plan controls" onGenerate={generate} busy={busy}>
-        <SliderField label="Days" value={days} onChange={setDays} min={3} max={14} step={1} />
+        <SliderField label="Days" value={days} onChange={setDays} min={1} max={14} step={1} />
         <SliderField
           label="Hours per day"
           value={hoursPerDay}

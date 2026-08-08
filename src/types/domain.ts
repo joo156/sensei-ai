@@ -154,6 +154,14 @@ export interface WsHistoryRow {
 export interface WsFlashcard {
   front: string;
   back: string;
+  tag?: string;
+  /** "term-definition" or "qa". */
+  format?: string;
+  /** Real content topic the card drills (from the PDF's topic allow-list). */
+  topic?: string;
+  /** Ingestion chunk id the card cites, when the model produced one. */
+  sourceChunkId?: string;
+  citations?: Citation[];
 }
 
 export type AuditAction = "Approved" | "Rejected" | "Needs Edit" | "Flagged" | "Comment";
