@@ -41,7 +41,7 @@ import { GlobalSearch } from "@/components/app/GlobalSearch";
 import { NotificationCenter } from "@/components/app/NotificationCenter";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAuth, type Role } from "@/contexts/AuthContext";
+import { useAuth, homeForRole, type Role } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { ReviewBadge } from "@/components/app/badges";
 import sprintsLogo from "@/assets/sprints-logo.png";
@@ -117,11 +117,14 @@ function NavSection({
       </p>
       <nav className="flex flex-col gap-0.5">
         {visible.map((item) => {
-          const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+          // "Home" is role-specific: students get /home, reviewers/admins their
+          // own landing page (ROLE_HOME), so the label never dead-ends.
+          const target = item.to === "/home" ? homeForRole(role) : item.to;
+          const active = target === "/" ? pathname === "/" : pathname.startsWith(target);
           return (
             <Link
               key={item.to}
-              to={item.to}
+              to={target}
               onClick={onNavigate}
               className={cn(
                 "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",

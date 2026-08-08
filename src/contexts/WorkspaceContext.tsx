@@ -15,6 +15,7 @@ import { isMockMode } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
 import { DocumentService, HistoryService, WorkspaceService } from "@/services";
+import type { PersistGenerationMeta } from "@/services/HistoryService";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
 import type {
@@ -62,7 +63,7 @@ interface WorkspaceCtx {
   /** Workspace-scoped write-back */
   addChat: (chat: WsChat) => void;
   appendChatMessage: (chatId: string, message: WsChat["messages"][number]) => void;
-  addHistory: (row: WsHistoryRow) => void;
+  addHistory: (row: WsHistoryRow, meta?: PersistGenerationMeta) => void;
 }
 
 const Ctx = createContext<WorkspaceCtx | null>(null);
@@ -169,7 +170,15 @@ function WorkspaceStore({
       const ids = new Set(seedWorkspaces.map((w) => w.id));
       if (parsed) {
         if (parsed.store) {
-          setStore(Object.fromEntries(Object.entries(parsed.store).filter(([id]) => ids.has(id))));
+          // The generation run log is not persisted locally anymore (Phase 8):
+          // strip any stale `history` from older localStorage snapshots so the
+          // Supabase-backed log from the bootstrap is authoritative.
+          const cleaned = Object.fromEntries(
+            Object.entries(parsed.store)
+              .filter(([id]) => ids.has(id))
+              .map(([id, d]) => [id, { ...d, history: [] }]),
+          );
+          setStore(cleaned);
         }
         if (parsed.activeId && ids.has(parsed.activeId)) setActiveId(parsed.activeId);
       } else {
@@ -190,12 +199,17 @@ function WorkspaceStore({
   }, [seedWorkspaces]);
 
   // Persist everything so notes, chats and review history survive a reload.
+  // The generation run log is excluded: since Phase 8 it lives in Supabase
+  // (`generations` + `history`) and is re-fetched at bootstrap.
   useEffect(() => {
     if (!hydrated.current) return;
     try {
+      const withoutHistory = Object.fromEntries(
+        Object.entries(store).map(([id, d]) => [id, { ...d, history: [] }]),
+      );
       window.localStorage.setItem(
         STATE_KEY,
-        JSON.stringify({ activeId, workspaces, store } satisfies PersistShape),
+        JSON.stringify({ activeId, workspaces, store: withoutHistory } satisfies PersistShape),
       );
       window.localStorage.setItem(STORAGE_KEY, activeId ?? "");
     } catch {
@@ -314,12 +328,20 @@ function WorkspaceStore({
           ),
         }));
       },
-      addHistory: (row) => {
+      addHistory: (row, meta) => {
         if (!active) return;
         mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] }));
-        void HistoryService.append(active.id, row).catch((err) =>
-          logger.warn("Failed to persist history row", err),
-        );
+        if (meta?.kind) {
+          // Phase 8: generations live in Supabase (payload + review queue).
+          void HistoryService.appendSupabase(active.id, row, meta).catch((err) =>
+            logger.error("Failed to persist generation to Supabase", err),
+          );
+        } else {
+          // Legacy FastAPI run log (mock mode / plain session rows).
+          void HistoryService.append(active.id, row).catch((err) =>
+            logger.warn("Failed to persist history row", err),
+          );
+        }
       },
     };
   }, [activeId, queryClient, setActive, store, mutate, workspaces]);

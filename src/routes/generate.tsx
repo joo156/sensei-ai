@@ -120,6 +120,13 @@ function Generate() {
         doc: documents.find((d) => d.id === selectedDoc)?.title ?? selectedDoc,
         items: res.data.length,
       }),
+      {
+        kind: "question_bank",
+        model: request.model,
+        title: documents.find((d) => d.id === selectedDoc)?.title ?? selectedDoc,
+        payload: { questions: res.data },
+        documentIds: request.documentIds,
+      },
     );
     notify.success(`${res.data.length} questions generated`, {
       description: "All items grounded and queued for human review.",

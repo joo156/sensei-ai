@@ -184,6 +184,19 @@ export interface DbAnalyticsSnapshot {
   avg_quality: number;
 }
 
+/** Per-user favorite flashcard, keyed by the card's stable front text. */
+export interface FlashcardFavorite {
+  id: string;
+  user_id: string;
+  generation_id: string | null;
+  front: string;
+  back: string | null;
+  topic: string | null;
+  format: string | null;
+  source_chunk_id: string | null;
+  created_at: string;
+}
+
 /** Convenience map mirroring the Supabase generated `Database` shape. */
 export interface Database {
   public: {
@@ -202,6 +215,7 @@ export interface Database {
       notifications: { Row: DbNotification };
       history: { Row: DbHistoryEntry };
       analytics: { Row: DbAnalyticsSnapshot };
+      flashcard_favorites: { Row: FlashcardFavorite };
     };
     Views: {
       workspace_with_owner: { Row: DbWorkspaceWithOwner };

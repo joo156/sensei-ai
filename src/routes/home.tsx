@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useServiceQuery } from "@/hooks/useServiceQuery";
+import { FavoriteService } from "@/services";
 import { TeamSection } from "@/components/app/TeamSection";
 import type { WsDoc } from "@/types/domain";
 
@@ -36,7 +38,9 @@ export const Route = createFileRoute("/home")({
     ],
   }),
   component: () => (
-    <RoleGate allow={["student", "reviewer", "admin"]}>
+    // Student home only — reviewers land on /review and admins on /admin
+    // (RoleGate redirects via ROLE_HOME when the role isn't in the allow-list).
+    <RoleGate allow={["student"]}>
       <StudentHome />
     </RoleGate>
   ),
@@ -88,8 +92,10 @@ function createdLabel(uploaded: string): string {
 function StudentHome() {
   const { user } = useAuth();
   const { active, data } = useWorkspace();
+  const favorites = useServiceQuery(["favorites"], () => FavoriteService.list());
   const name = user?.name.split(" ")[0] ?? "there";
   const latest = [...data.docs].sort((a, b) => b.uploaded.localeCompare(a.uploaded))[0];
+  const favoriteCards = favorites.data ?? [];
 
   return (
     <AppShell
@@ -268,14 +274,20 @@ function StudentHome() {
                 <p className="text-sm font-semibold">Favorite flashcards</p>
               </div>
               <div className="mt-3 space-y-2">
-                {["Immutable sequence type", "What does `len()` call?", "Duck typing"].map((f) => (
-                  <div
-                    key={f}
-                    className="border-border bg-muted/40 rounded-lg border px-3 py-2 text-sm"
-                  >
-                    {f}
-                  </div>
-                ))}
+                {favoriteCards.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    No favorites yet — star a flashcard from the AI Studio.
+                  </p>
+                ) : (
+                  favoriteCards.slice(0, 4).map((f) => (
+                    <div
+                      key={f.id}
+                      className="border-border bg-muted/40 rounded-lg border px-3 py-2 text-sm"
+                    >
+                      {f.front}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

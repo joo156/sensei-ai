@@ -149,6 +149,8 @@ export interface WsHistoryRow {
   review: ReviewState;
   items: number;
   chatId?: string;
+  /** Supabase generations row this run is persisted under (for reopen). */
+  generationId?: string;
 }
 
 export interface WsFlashcard {
@@ -180,6 +182,14 @@ export interface WeakTopic {
   topic: string;
   strength: number;
   action: string;
+  /** One-line summary of what to revisit for this topic. */
+  description?: string;
+  /** Per-topic difficulty: easy / medium / hard. */
+  difficulty?: string;
+  /** Suggested review-by date (ISO). */
+  nextRevisionDate?: string;
+  /** Optional self-check prompt for this topic. */
+  confidencePrompt?: string;
 }
 
 export interface WorkspaceData {

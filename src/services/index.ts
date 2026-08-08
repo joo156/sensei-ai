@@ -10,6 +10,7 @@ export { AnalyticsService } from "./AnalyticsService";
 export { AgentService } from "./AgentService";
 export { ContentService } from "./ContentService";
 export { NotificationService } from "./NotificationService";
+export { FavoriteService } from "./FavoriteService";
 export { SearchService } from "./SearchService";
 export { ModelService } from "./ModelService";
 export { ExportService } from "./ExportService";

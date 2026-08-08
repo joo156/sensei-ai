@@ -23,13 +23,25 @@ export interface Flashcard {
   citations?: Citation[];
 }
 
-export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
+export function FlashcardDeck({
+  cards: initial,
+  favorites,
+  onToggleFavorite,
+}: {
+  cards: Flashcard[];
+  /** Front-text keys the user has favorited (persisted via FavoriteService). */
+  favorites?: Set<string>;
+  /** When provided, toggling delegates persistence to the caller. */
+  onToggleFavorite?: (card: Flashcard) => void;
+}) {
   const [cards, setCards] = useState(initial);
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [favs, setFavs] = useState<Set<string>>(favorites ?? new Set());
   const [hard, setHard] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"study" | "quiz">("study");
+
+  useEffect(() => setFavs(favorites ?? new Set()), [favorites]);
 
   useEffect(() => setFlipped(false), [i, mode]);
 
@@ -65,10 +77,14 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
   };
 
   const toggleFav = () => {
+    if (onToggleFavorite) {
+      onToggleFavorite(current);
+      return;
+    }
     setFavs((s) => {
       const n = new Set(s);
-      if (n.has(current.id)) n.delete(current.id);
-      else n.add(current.id);
+      if (n.has(current.front)) n.delete(current.front);
+      else n.add(current.front);
       return n;
     });
   };
@@ -108,7 +124,6 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
           <Shuffle className="size-3.5" /> Shuffle
         </Button>
       </div>
-
       <div className="[perspective:1600px]">
         <motion.button
           type="button"
@@ -139,7 +154,6 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
           </div>
         </motion.button>
       </div>
-
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         <Button variant="outline" size="sm" onClick={prev}>
           <ChevronLeft className="size-4" /> Prev
@@ -159,9 +173,9 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
           variant="ghost"
           size="sm"
           onClick={toggleFav}
-          className={cn(favs.has(current.id) && "text-destructive")}
+          className={cn(favs.has(current.front) && "text-destructive")}
         >
-          <Heart className={cn("size-3.5", favs.has(current.id) && "fill-current")} /> Favorite
+          <Heart className={cn("size-3.5", favs.has(current.front) && "fill-current")} /> Favorite
         </Button>
         <Button variant="outline" size="sm" onClick={next}>
           Next <ChevronRight className="size-4" />
@@ -170,7 +184,7 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
       <p className="text-muted-foreground mt-3 text-center text-[11px]">
         {hard.size} marked difficult · {favs.size} favorited · Spaced repetition prioritises
         difficult cards next session
-      </p>
+      </p>{" "}
     </div>
   );
 }

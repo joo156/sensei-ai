@@ -119,6 +119,10 @@ export interface WeakTopic {
   topic: string;
   strength: number;
   action: string;
+  description?: string;
+  difficulty?: string;
+  nextRevisionDate?: string;
+  confidencePrompt?: string;
 }
 
 export async function generateRevisionSheet(
