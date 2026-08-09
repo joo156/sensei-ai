@@ -3,7 +3,7 @@
 --
 -- Phase 7.3 — Document / Generation / Review security (RLS ownership model).
 --
--- Requirement (see PHASE7_FINAL_IMPLEMENTATION_REPORT.txt §7):
+-- Requirement (Phase 7.3 security model — RLS ownership by workspace):
 --   * Student   → full CRUD on the documents, generations and reviews that
 --                 belong to workspaces they own. Read-only access to nothing
 --                 owned by another student.

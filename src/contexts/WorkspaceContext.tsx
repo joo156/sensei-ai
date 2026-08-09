@@ -371,7 +371,17 @@ function WorkspaceStore({
         }
       },
     };
-  }, [activeId, queryClient, setActive, store, mutate, workspaces, setStore, setWorkspaces, setActiveId]);
+  }, [
+    activeId,
+    queryClient,
+    setActive,
+    store,
+    mutate,
+    workspaces,
+    setStore,
+    setWorkspaces,
+    setActiveId,
+  ]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

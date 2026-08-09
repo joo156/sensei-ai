@@ -1,7 +1,7 @@
 -- ============================================================================
 -- 010_workspace_visibility_hard_fix.sql
 --
--- Phase 7.2 root-cause fix (see PHASE7_VERIFY_VISIBILITY.txt §6-§7).
+-- Phase 7.2 root-cause fix for workspace visibility.
 --
 -- Problem: 009's detect-and-create guards skipped replacing the OLD
 -- `public.has_role(uuid, app_role)` that 001_initial_schema.sql already

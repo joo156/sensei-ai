@@ -148,7 +148,7 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
--- 4. Signed-URL helper (backend support — see docs/SUPABASE_INTEGRATION.md §6).
+-- 4. Signed-URL helper (backend storage support):
 --
 -- Returns a short-lived signed URL for a document path, but only when the
 -- caller is the workspace owner or staff. The bucket itself is private, so the

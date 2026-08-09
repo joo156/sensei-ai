@@ -19,3 +19,26 @@ is `src/routes/__root.tsx`.
 | `__root.tsx`             | app shell — wraps every page; preserve `<Outlet />`     |
 
 `routeTree.gen.ts` is auto-generated. Don't edit it by hand.
+
+## Routes in this app
+
+| File                     | URL                                   | Purpose                                   |
+| ------------------------ | ------------------------------------- | ----------------------------------------- |
+| `index.tsx`              | `/`                                   | Redirect shell (to `/home`)               |
+| `__root.tsx`             | (root)                                | App shell — mounts all providers          |
+| `login.tsx`              | `/login`                              | Sign in                                   |
+| `home.tsx`               | `/home`                               | Dashboard                                 |
+| `studio.tsx`             | `/studio`                             | Upload + generate console                 |
+| `workspace.tsx`          | `/workspace`                          | Workspace CRUD / switch                   |
+| `library.tsx`            | `/library`                            | Uploaded documents                        |
+| `generate.tsx`           | `/generate`                           | Question / flashcard generation           |
+| `chat.$chatId.tsx`       | `/chat/:chatId`                       | Agent chat thread                         |
+| `review.tsx`             | `/review`                             | Review workflow + export                  |
+| `pipeline.tsx`           | `/pipeline`                           | RAG pipeline visualisation                |
+| `agents.tsx`             | `/agents`                             | Agent catalogue                           |
+| `history.tsx`            | `/history`                            | Generation history                        |
+| `analytics.tsx`          | `/analytics`                          | Analytics dashboards                      |
+| `settings.tsx`           | `/settings`                           | Profile + preferences                     |
+| `admin.tsx`              | `/admin`                              | Admin (role-gated)                        |
+| `reopen.$generationId.tsx`| `/reopen/:generationId`              | Re-open a past generation                 |
+| `sitemap[.]xml.ts`       | `/sitemap.xml`                        | SEO sitemap                               |

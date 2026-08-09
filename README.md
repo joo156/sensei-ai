@@ -1,34 +1,51 @@
-# Sensei — Grounded AI Study Workspace
+<div align="center">
 
-Sensei is a multi-agent, grounded AI study platform. Students upload educational
-material (PDF, DOCX, PPTX, TXT) and the platform turns it into cited question
-banks, flashcards, study plans and revision sheets through a transparent RAG
-pipeline — every output validated, grounded back to source chunks, and gated by
-a human review workflow before export.
+# 🎓 Sensei — Grounded AI Study Workspace
 
-The frontend is built as a production-quality TanStack Start (SSR) application
-with a strict layering so a FastAPI backend and Supabase can be connected later
-**without touching any UI code**.
+A multi-agent, **grounded** AI study platform. Upload your material and get
+cited question banks, flashcards, study plans and revision sheets — every
+output validated, grounded to source chunks, and gated by a human review
+workflow before export.
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React_19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TanStack Start](https://img.shields.io/badge/TanStack_Start-FF4154?logo=tanstack&logoColor=white)](https://tanstack.com/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_v4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+**Frontend** — [github.com/joo156/sensei-ai](https://github.com/joo156/sensei-ai) ·
+**Backend** — [github.com/MoHatemTC/ai-content-agents](https://github.com/MoHatemTC/ai-content-agents)
+
+</div>
 
 ---
 
-## Features
+## What it does
+
+Students upload educational material (PDF, DOCX, PPTX, TXT) and Sensei turns it
+into study content through a transparent RAG pipeline:
+
+```
+upload → parse → chunk → embed → retrieve → generate → validate → human review → export
+```
 
 - **7 AI agents** — Mentor, Concept Explanation, Question Bank, Test Help,
   Flashcards, Study Plan, Revision Assistant.
-- **Grounded RAG pipeline** — upload → parse → chunk → embed → retrieve →
-  generate → validate → human review → export (visualised on the Pipeline page).
-- **Question Bank** — MCQ / True-False / Short Answer with difficulty tiers,
-  Bloom's classification, citations, quality and grounding scores.
-- **Review workflow** — approve / reject / needs-edit with comments, audit
-  trail, and grounding/quality auto-flagging. Export stays locked until approved.
-- **Workspaces** — isolated docs, chats, generations and review history.
-- **Roles** — `student`, `reviewer`, `admin` gated through a permission system.
-- **Global search** — documents, questions, flashcards, concepts and history.
-- **Analytics** — grounding, quality, Bloom distribution, topic coverage.
-- **Dark & light themes**, responsive layout, elegant loading/error/empty states.
+- **Grounded outputs** — every question/chat answer cites the exact source
+  page and chunk it came from, with grounding and quality scores.
+- **Human review gate** — approve / reject / needs-edit with comments and an
+  audit trail. Export stays locked until content is approved.
+- **Workspaces** — fully isolated docs, chats, generations and review history.
+- **Global search** — across documents, questions, flashcards and history.
+- **Analytics** — grounding, quality, Bloom's distribution, topic coverage.
 
-## Stack
+## Screenshots
+
+> _Screenshots go here — drop preview images into `public/screenshots/` and link
+> them from this section._
+
+## Tech stack
 
 | Layer         | Technology                             |
 | ------------- | -------------------------------------- |
@@ -41,23 +58,47 @@ with a strict layering so a FastAPI backend and Supabase can be connected later
 | Build         | Vite 8 + Nitro                         |
 | Language      | TypeScript (strict)                    |
 
-## Project structure
+## Quick start
 
-```text
-src/
-├── routes/        # File-based pages (TanStack Router)
-├── components/    # ui/ (shadcn primitives) + app/ (feature components)
-├── contexts/      # Auth, Workspace, Notification providers
-├── hooks/         # Shared React hooks
-├── services/      # Business logic — the only layer backend swap touches
-│   └── ai/        # AI provider abstraction (Mock / Gemini / Kimi / Nvidia)
-├── api/           # Endpoint functions (one file per domain) + HTTP client
-├── mock/          # Offline mock data layer
-├── types/         # Domain models + database contract + API contracts
-├── config/        # Env var reading with safe defaults
-├── constants/     # Roles, permissions, storage keys
-└── lib/           # Utilities (logger, error reporter, result envelope)
+```bash
+npm install
+npm run dev        # http://localhost:8080 (mock mode on by default)
 ```
+
+By default (`VITE_ENABLE_MOCK=true`) the app runs **fully offline** from
+`src/mock` — every feature works without a backend.
+
+### Demo accounts (mock mode)
+
+| Role     | Email                | Password   |
+| -------- | -------------------- | ---------- |
+| Student  | `student@sensei.ai`  | `student`  |
+| Reviewer | `reviewer@sensei.ai` | `reviewer` |
+| Admin    | `admin@sensei.ai`    | `admin`    |
+
+## Running the full app (backend + frontend)
+
+Sensei is two processes: the **FastAPI backend** (port `8000`) and this
+**frontend** (port `8080`). The frontend talks to the backend through
+`src/api/http.ts`.
+
+```bash
+# Backend  — https://github.com/MoHatemTC/ai-content-agents
+cd ~/Desktop/ai-content-agents
+./start-dev.sh                          # boots FastAPI on :8000
+
+# Frontend — this repo
+cd ~/Desktop/Sensei-AI
+npm run dev                             # http://localhost:8080
+```
+
+See the backend repository's README for setup (LiteLLM key, Supabase URL/anon
+key, JWT secret). The frontend leaves mock mode by setting
+`VITE_API_BASE_URL=http://localhost:8000` and `VITE_ENABLE_MOCK=false` in
+`.env.local`.
+
+> If you see **"Unable to load your workspaces · Load failed"**, the backend is
+> down — start it with `./start-dev.sh`.
 
 ## Architecture & data flow
 
@@ -66,7 +107,7 @@ component → hook/context → Service → *.api.ts → (mock | FastAPI/Supabase
 ```
 
 A component never imports `src/api` or `src/mock`. Every backend interaction
-already flows through a service:
+flows through a service:
 
 - Workspace → `WorkspaceService` → `workspace.api.ts`
 - Generation → `GenerationService` → `generation.api.ts` (via `AIProvider`)
@@ -75,151 +116,77 @@ already flows through a service:
 - Analytics → `AnalyticsService` → `analytics.api.ts`
 - Auth → `AuthService` → `auth.api.ts` (Supabase-shaped)
 
-See [docs/FRONTEND_ARCHITECTURE.md](docs/FRONTEND_ARCHITECTURE.md) for details.
+```
+src/
+├── routes/        # File-based pages (TanStack Router)
+├── components/    # ui/ (shadcn primitives) + app/ (feature components)
+├── contexts/      # Auth, Workspace, Theme, Notification providers
+├── hooks/         # Shared React hooks
+├── services/      # Business logic — the only layer a backend swap touches
+│   └── ai/        # AI provider abstraction (Mock / Gemini / Kimi / Nvidia)
+├── api/           # Endpoint functions (one file per domain) + HTTP client
+├── mock/          # Offline mock data layer
+├── types/         # Domain models + database + API contracts
+├── config/        # Env var reading with safe defaults
+├── constants/     # Roles, permissions, storage keys
+└── lib/           # Utilities (logger, error reporter, result envelope)
+```
 
-## Mock mode
+## Pages
 
-By default (`VITE_ENABLE_MOCK=true`) the app runs **fully offline** from
-`src/mock`: demo accounts, seeded workspaces, pre-chunked documents, generated
-questions, chats, history and review data. Every feature works — including
-login, workspace switching, generation, review and analytics.
-
-Demo accounts:
-
-| Role     | Email               | Password   |
-| -------- | ------------------- | ---------- |
-| Student  | `student@sensei.ai`  | `student`  |
-| Reviewer | `reviewer@sensei.ai` | `reviewer` |
-| Admin    | `admin@sensei.ai`    | `admin`    |
+`/home` · `/studio` · `/workspace` · `/library` · `/generate` · `/chat/:chatId` ·
+`/review` · `/pipeline` · `/agents` · `/history` · `/analytics` · `/settings` ·
+`/admin` · `/login` · `/reopen/:generationId`
 
 ## AI providers
 
 `services/ai/AIProvider.ts` exposes one `AIProvider` interface over four
-providers: **Mock**, **Gemini**, **Kimi**, **Nvidia**. When a real backend is
-connected, each provider id maps to the same FastAPI routes; the UI only passes
-the selected model id.
+providers: **Mock**, **Gemini**, **Kimi**, **Nvidia**. In real mode each
+provider id maps to the same FastAPI routes; the UI only passes the selected
+model id.
 
 ## Roles & permissions
 
 `src/constants/index.ts` holds `ROLE_PERMISSIONS`. Use
-`useAuth().can("review:approve")` or `usePermissions()`, and guard pages with
-`<RoleGate>`. Never write `role === "admin"` inside a component.
+`useAuth().can("review:approve")` and guard pages with `<RoleGate>`. Never
+write `role === "admin"` inside a component.
 
 ## Environment variables
 
-| Variable                        | Default   | Purpose                                    |
-| ------------------------------- | --------- | ------------------------------------------ |
-| `VITE_API_BASE_URL`             | `/api`    | FastAPI base URL                           |
-| `VITE_SUPABASE_URL`             | _(empty)_ | Supabase project URL                       |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | _(empty)_ | Supabase anon key                          |
-| `VITE_ENABLE_MOCK`              | `true`    | Resolve from `src/mock` instead of network |
-| `VITE_DEFAULT_MODEL`            | `mock`    | Default AI provider id                     |
+Copy `.env.example` to `.env.local`. Only publishable keys belong in the
+browser.
 
-Only publishable keys belong in the browser.
+| Variable                    | Default   | Purpose                                    |
+| --------------------------- | --------- | ------------------------------------------ |
+| `VITE_API_BASE_URL`         | `/api`    | FastAPI base URL                           |
+| `VITE_SUPABASE_URL`         | _(empty)_ | Supabase project URL                       |
+| `VITE_SUPABASE_ANON_KEY`    | _(empty)_ | Supabase anon key (publishable)            |
+| `VITE_ENABLE_MOCK`          | `true`    | Resolve from `src/mock` instead of network |
+| `VITE_DEFAULT_MODEL`        | `mock`    | Default AI provider id                     |
 
 ## Development
 
 ```bash
-npm install
-npm run dev        # http://localhost:8080
+npm run dev        # dev server (HMR) on :8080
+npm run typecheck  # tsc --noEmit
+npm run lint       # ESLint + Prettier
+npm run format     # Prettier write
 npm run build      # production build
 npm run preview    # preview the production build
-npx tsc --noEmit   # type-check
-npm run lint       # ESLint + Prettier check
-npm run format     # Prettier write
 ```
-
-## Running the full app (backend + frontend)
-
-Sensei is two processes: the **FastAPI backend** (`ai-content-agents`, port
-`8000`) and this **frontend** (Vite, port `8080`). The frontend talks to the
-backend through `src/api/http.ts` (see `VITE_API_BASE_URL`). The backend is not
-a service — it must be started manually, and it stops on laptop shutdown.
-
-### One command
-
-```bash
-./start-dev.sh           # start backend + frontend together
-./start-dev.sh status    # show what is running
-./start-dev.sh stop      # stop both
-```
-
-Run `./start-dev.sh` once after every laptop restart. If you see
-**"Unable to load your workspaces · Load failed"**, the backend is down — that
-is the fix.
-
-- Frontend → http://localhost:8080
-- Backend health → http://127.0.0.1:8000/health
-- Logs → `ai-content-agents/server.log` (backend), `dev.log` (frontend)
-
-Ports are configurable: `BACKEND_PORT=9000 FRONTEND_PORT=3000 ./start-dev.sh`.
-
-### Manual start (two terminals)
-
-```bash
-# Terminal 1 — backend
-cd ~/Desktop/ai-content-agents
-.venv/bin/python -c "
-import os
-from dotenv import load_dotenv
-load_dotenv('.env', override=False)
-os.environ.pop('SUPABASE_JWT_SECRET', None)
-import uvicorn
-uvicorn.run('backend.main:app', host='127.0.0.1', port=8000)
-"
-
-# Terminal 2 — frontend
-cd ~/Desktop/Sensei-AI
-npm run dev
-```
-
-The backend loads `.env` itself by absolute path, so it works from any
-directory. `SUPABASE_JWT_SECRET` is dropped so access tokens are verified
-through Supabase GoTrue instead of local HS256 (required for login).
-
-### First-time setup
-
-```bash
-# Backend
-cd ~/Desktop/ai-content-agents
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env        # then fill in LITELLM_API_KEY, LITELLM_BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY
-
-# Frontend (this repo)
-cd ~/Desktop/Sensei-AI
-npm install
-cp .env.example .env.local  # then set VITE_API_BASE_URL=http://localhost:8000 and VITE_ENABLE_MOCK=false
-```
-
-### Troubleshooting
-
-| Symptom                                  | Cause                          | Fix                                  |
-| ---------------------------------------- | ------------------------------ | ------------------------------------ |
-| "Unable to load your workspaces / Load failed" | Backend not running (common after reboot) | `./start-dev.sh`              |
-| Login fails / 401 "Invalid or expired token"    | `SUPABASE_JWT_SECRET` leaked into env, or wrong Supabase URL/anon key | Use `./start-dev.sh` (it drops the secret); check `.env` |
-| Generation shows placeholder text        | Backend serving test doubles   | Check `SENSEI_USE_TEST_DOUBLES` is unset; restart backend |
-| Port 8000/8080 already in use            | Another process is listening    | `./start-dev.sh stop`, then start again |
-
-## Backend readiness
-
-This repository is a **frontend-ready** build. The service/API layer is
-structured so that:
-
-- **FastAPI** — implement `docs/FASTAPI_INTEGRATION.md` and
-  `docs/BACKEND_CONTRACT.md`, set `VITE_API_BASE_URL`, flip
-  `VITE_ENABLE_MOCK=false`. No frontend refactoring required.
-- **Supabase** — swap `auth.api.ts` + `AuthService` and the mock branches in the
-  workspace/document/history/review/analytics api modules, per
-  `docs/SUPABASE_INTEGRATION.md`. `AuthContext` and all pages stay as-is.
-
-See [ROADMAP.md](ROADMAP.md) for the current and planned work.
 
 ## Documentation
 
-- [Frontend Architecture](docs/FRONTEND_ARCHITECTURE.md)
-- [Development Guide](docs/DEVELOPMENT_GUIDE.md)
-- [FastAPI Integration](docs/FASTAPI_INTEGRATION.md)
-- [Backend Contract](docs/BACKEND_CONTRACT.md)
-- [Supabase Integration](docs/SUPABASE_INTEGRATION.md)
-- [Database Schema](docs/DATABASE_SCHEMA.md)
+| Document | Contents |
+| -------- | -------- |
+| [Project Reference](docs/PROJECT_REFERENCE.md) | Full build reference — architecture, routes, services, integration status |
+| [Frontend Architecture](docs/FRONTEND_ARCHITECTURE.md) | Layering rules, contexts, stores |
+| [Development Guide](docs/DEVELOPMENT_GUIDE.md) | Local setup, environment, checks |
+| [FastAPI Integration](docs/FASTAPI_INTEGRATION.md) | Endpoint reference with JSON shapes |
+| [Backend Contract](docs/BACKEND_CONTRACT.md) | Action → endpoint → auth matrix |
+| [Database Schema](docs/DATABASE_SCHEMA.md) | Supabase tables, relationships, RLS |
+| [Contributing](CONTRIBUTING.md) | How to work in this repo |
+
+## License
+
+[MIT](LICENSE) — see the LICENSE file.

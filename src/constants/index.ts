@@ -10,7 +10,7 @@ export const ROLE_HOME: Record<(typeof ROLES)[number], string> = {
   admin: "/admin",
 };
 
-/** Permissions per role — consumed via useAuth()/usePermissions(), never inline. */
+/** Permissions per role — consumed via useAuth().can(), never inline. */
 export const ROLE_PERMISSIONS = {
   student: ["review:read", "generation:create", "workspace:read", "document:upload"],
   reviewer: [

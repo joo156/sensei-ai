@@ -32,7 +32,12 @@ import type { GeneratedQuestion, ReviewState } from "@/types/domain";
 import type { WsAuditEntry } from "@/types/domain";
 import type { Citation } from "@/types/domain";
 import type { ReviewItem } from "@/types/api/review.contracts";
-import type { DbGenerationWithCreator, DbReview, GenerationKind, ReviewStatus } from "@/types/database.types";
+import type {
+  DbGenerationWithCreator,
+  DbReview,
+  GenerationKind,
+  ReviewStatus,
+} from "@/types/database.types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 

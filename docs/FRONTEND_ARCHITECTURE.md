@@ -21,9 +21,9 @@ config/ + constants/       env placeholders, roles, permissions, storage keys.
 - `src/components/ui` — shadcn primitives. `src/components/app` — app-level components (AppShell, RoleGate, ModelSelector, NotificationCenter, …).
 - `src/contexts/AuthContext.tsx` — provider shaped like Supabase Auth: `login`, `signIn`, `logout`, `refreshSession`, `getCurrentUser`, `hasRole`, `can`.
 - `src/contexts/WorkspaceContext.tsx` — the single source of `activeWorkspaceId`. All workspace-owned data (docs, chunks, chats, questions, flashcards, history, audit) is read from `useWorkspace().data`, already scoped to the active workspace, so pages never filter by workspace themselves.
-- `src/services` — `AuthService`, `WorkspaceService`, `DocumentService`, `UploadService`, `GenerationService`, `ChatService`, `ReviewService`, `HistoryService`, `AnalyticsService`, `ModelService`, plus `services/ai/AIProvider.ts`.
-- `src/api` — `auth.api.ts`, `workspace.api.ts`, `document.api.ts`, `generation.api.ts`, `chat.api.ts`, `review.api.ts`, `history.api.ts`, `analytics.api.ts`, `model.api.ts`, `http.ts`. Each function checks `isMockMode()`: mock data now, `http.*` call later.
-- `src/mock` — `users.ts`, `mock-data.ts`, `studio-data.ts`, `workspace-data.ts`.
+- `src/services` — `AuthService`, `WorkspaceService`, `DocumentService`, `UploadService`, `GenerationService`, `ChatService`, `ReviewService`, `HistoryService`, `AnalyticsService`, `ModelService`, `SearchService`, `ExportService`, `AdminService`, `AgentService`, `NotificationService`, `FavoriteService`, `ContentService`, plus `services/ai/AIProvider.ts`.
+- `src/api` — one file per domain (`auth`, `workspace`, `document`, `generation`, `chat`, `review`, `history`, `analytics`, `admin`, `model`, `search`, `export`, `catalogue`, `supabase`), plus `paths.ts` (single endpoint map) and `http.ts` (the single HTTP client + token holder + error shaping). Each function checks `isMockMode()`: mock data now, `http.*` when real.
+- `src/mock` — `mock-data.ts` (documents, flashcards, history, questions, analytics seeds), `studio-data.ts` (workspaces, demo users, notifications, rag stages).
 
 ## Data flow
 
@@ -39,7 +39,7 @@ A component never imports from `src/api` or `src/mock`.
 
 ## Permissions
 
-`constants/index.ts` holds `ROLE_PERMISSIONS`. Use `useAuth().can("review:approve")` or `usePermissions()`. `RoleGate` guards routes by role. Never write `role === "admin"` in a component.
+`constants/index.ts` holds `ROLE_PERMISSIONS`. Use `useAuth().can("review:approve")`. `RoleGate` guards routes by role. Never write `role === "admin"` in a component.
 
 ## Stores
 
@@ -47,4 +47,4 @@ Auth, Workspace and Theme are React Contexts (one consistent pattern). Generatio
 
 ## Config
 
-`config/env.ts` reads `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_ENABLE_MOCK`, `VITE_DEFAULT_MODEL`. `ENABLE_MOCK=true` keeps the app fully offline.
+`config/env.ts` reads `VITE_API_BASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_ENABLE_MOCK`, `VITE_DEFAULT_MODEL`. `ENABLE_MOCK=true` keeps the app fully offline.

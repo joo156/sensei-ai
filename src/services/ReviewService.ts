@@ -99,10 +99,7 @@ export const ReviewService = {
           supabaseApi.listGenerationsWithCreator(workspaceId),
           supabaseApi.listReviewsForWorkspace(workspaceId),
         ])
-      : await Promise.all([
-          supabaseApi.listGenerationsWithCreator(),
-          supabaseApi.listAllReviews(),
-        ]);
+      : await Promise.all([supabaseApi.listGenerationsWithCreator(), supabaseApi.listAllReviews()]);
     return { generations, reviews };
   },
 
