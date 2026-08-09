@@ -1,9 +1,13 @@
 /** Admin dashboard aggregates — live, staff-wide numbers. */
+import * as adminApi from "@/api/admin.api";
 import * as supabaseApi from "@/api/supabase.api";
 import { isMockMode } from "@/config/env";
 import { attempt } from "@/lib/result";
+import { KIND_TO_AGENT } from "@/services/HistoryService";
 import type { Result } from "@/types/api/common";
+import type { AdminStats } from "@/types/api/admin.contracts";
 import type { DbGeneration } from "@/types/database.types";
+import type { ReviewState } from "@/types/domain";
 
 export interface AdminOverview {
   /** Documents across every workspace (staff-wide). */
@@ -26,11 +30,24 @@ export interface AdminPipelineStats {
   supportCheckedPct: number | null;
 }
 
-/** Number of question items carried by a generation payload. */
-function questionItemCount(g: DbGeneration): number {
+/** A Supabase generation formatted for the admin "Recent generations" feed. */
+export interface AdminRecentGeneration {
+  id: string;
+  agent: string;
+  items: number;
+  doc: string;
+  date: string;
+  review: ReviewState;
+}
+
+/** Number of items carried by a generation payload (questions/flashcards/days/weakTopics). */
+function payloadItemCount(g: DbGeneration): number {
   const payload = (g.payload ?? {}) as Record<string, unknown>;
-  const questions = payload.questions;
-  return Array.isArray(questions) ? questions.length : 0;
+  for (const key of ["questions", "flashcards", "days", "weakTopics"]) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value.length;
+  }
+  return 0;
 }
 
 function mean(values: number[]): number | null {
@@ -40,38 +57,47 @@ function mean(values: number[]): number | null {
 
 export const AdminService = {
   /**
-   * Live platform totals for the admin dashboard. Real mode aggregates the
-   * Supabase `workspace_with_owner` + `generations` tables (staff-wide reads);
-   * mock mode returns the demo figures so the dashboard still has content.
+   * Live platform totals for the admin dashboard. Real mode reads FastAPI
+   * `/admin/stats` (site-wide counts from the platform database) for
+   * documents/questions/quality and Supabase `generations` (staff-wide) for
+   * grounding; mock mode returns the demo figures.
    */
+  async stats(): Promise<Result<AdminStats>> {
+    return attempt("AdminService.stats", () => adminApi.getAdminStats());
+  },
+
   async overview(): Promise<Result<AdminOverview>> {
     return attempt("AdminService.overview", async () => {
       if (isMockMode()) {
-        return { documents: 5, questions: 480, grounding: 98.4, quality: 9.3 };
+        const stats = await adminApi.getAdminStats();
+        return {
+          documents: stats.documents,
+          questions: stats.questions,
+          grounding: 98.4,
+          quality: stats.quality,
+        };
       }
-      const [workspaces, generations] = await Promise.all([
-        supabaseApi.listWorkspacesWithOwner(),
+      const [stats, generations] = await Promise.all([
+        adminApi.getAdminStats(),
         supabaseApi.listAllGenerations(),
       ]);
       const grounding = mean(
         generations.map((g) => g.grounding_score).filter((v): v is number => v != null),
       );
-      const quality = mean(
-        generations.map((g) => g.quality_score).filter((v): v is number => v != null),
-      );
       return {
-        documents: workspaces.reduce((n, w) => n + w.document_count, 0),
-        questions: generations.reduce((n, g) => n + questionItemCount(g), 0),
+        documents: stats.documents,
+        questions: stats.questions,
         grounding: grounding != null ? Math.round(grounding * 10) / 10 : null,
-        quality: quality != null ? Math.round(quality * 10) / 10 : null,
+        quality: stats.quality,
       };
     });
   },
 
   /**
-   * Live RAG pipeline telemetry for the /pipeline page. Real mode reads the
-   * staff-gated `pipeline_stats` view (migration 019); mock mode returns the
-   * demo figures so the page still has content.
+   * Live RAG pipeline telemetry for the /pipeline page. Real mode takes the
+   * chunks count from FastAPI `/admin/stats` (the platform database owns the
+   * indexed chunks) and the config/measured values from the staff-gated
+   * Supabase `pipeline_stats` view; mock mode returns the demo figures.
    */
   async pipelineStats(): Promise<Result<AdminPipelineStats>> {
     return attempt("AdminService.pipelineStats", async () => {
@@ -85,15 +111,56 @@ export const AdminService = {
           supportCheckedPct: 100,
         };
       }
-      const row = await supabaseApi.getPipelineStats();
+      const [stats, telemetry] = await Promise.all([
+        adminApi.getAdminStats(),
+        supabaseApi.getPipelineStats(),
+      ]);
       return {
-        chunksIndexed: row?.chunks_indexed ?? 0,
-        avgRetrievalMs: row?.avg_retrieval_ms ?? null,
-        topK: row?.top_k ?? null,
-        embeddingModel: row?.embedding_model ?? null,
-        validationPassRate: row?.validation_pass_rate ?? null,
-        supportCheckedPct: row?.support_checked_pct ?? null,
+        chunksIndexed: stats.chunksIndexed,
+        avgRetrievalMs: telemetry?.avg_retrieval_ms ?? null,
+        topK: telemetry?.top_k ?? null,
+        embeddingModel: telemetry?.embedding_model ?? null,
+        validationPassRate: telemetry?.validation_pass_rate ?? null,
+        supportCheckedPct: telemetry?.support_checked_pct ?? null,
       };
     });
   },
+
+  /**
+   * Recent generations for the admin dashboard feed. Real mode reads the
+   * Supabase `generations` table (staff-wide); mock mode returns the seeded
+   * demo history.
+   */
+  async recentGenerations(): Promise<Result<AdminRecentGeneration[]>> {
+    return attempt("AdminService.recentGenerations", async () => {
+      if (isMockMode()) {
+        const { history } = await import("@/mock/mock-data");
+        return history.slice(0, 5).map((h) => ({
+          id: h.id,
+          agent: h.agent,
+          items: h.items,
+          doc: h.doc,
+          date: h.date,
+          review: h.review,
+        }));
+      }
+      const generations = await supabaseApi.listAllGenerations();
+      return generations.slice(0, 5).map((g) => ({
+        id: g.id,
+        agent: KIND_TO_AGENT[g.kind] ?? g.kind,
+        items: payloadItemCount(g),
+        doc: g.title,
+        date: g.created_at.slice(0, 10),
+        review: REVIEW_TO_STATUS_REVERSE[g.review_status],
+      }));
+    });
+  },
+};
+
+/** Supabase review status → human review state for the admin feed. */
+const REVIEW_TO_STATUS_REVERSE: Record<DbGeneration["review_status"], ReviewState> = {
+  pending: "Pending",
+  approved: "Approved",
+  rejected: "Rejected",
+  needs_edit: "Needs Edit",
 };

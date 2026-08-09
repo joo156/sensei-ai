@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ReviewBadge } from "@/components/app/badges";
 import { AsyncSection } from "@/components/app/AsyncState";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
-import { AdminService, AnalyticsService, ContentService } from "@/services";
+import { AdminService, AnalyticsService } from "@/services";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/admin")({
@@ -44,15 +44,23 @@ export const Route = createFileRoute("/admin")({
 
 function AdminDashboard() {
   const { active } = useWorkspace();
-  const catalogue = useServiceQuery(["catalogue", "admin"], () => ContentService.catalogue());
   const workspaceId = active ? active.id : "";
   const analytics = useServiceQuery(["analytics", workspaceId], () =>
     AnalyticsService.get({ workspaceId, range: "30d" }),
   );
   const overview = useServiceQuery(["admin", "overview"], () => AdminService.overview());
-  const documents = catalogue.data?.documents ?? [];
-  const history = catalogue.data?.history ?? [];
+  const adminStats = useServiceQuery(["admin", "stats"], () => AdminService.stats());
+  const recent = useServiceQuery(["admin", "recent-generations"], () =>
+    AdminService.recentGenerations(),
+  );
+  const documents = adminStats.data?.recentDocuments ?? [];
+  const history = recent.data ?? [];
   const stats = overview.data;
+  const topicCoverage = analytics.data?.topicCoverage ?? [];
+  const overallCoverage =
+    topicCoverage.length > 0
+      ? Math.round(topicCoverage.reduce((n, t) => n + t.pct, 0) / topicCoverage.length)
+      : null;
 
   return (
     <AppShell
@@ -115,7 +123,7 @@ function AdminDashboard() {
 
         <div className="surface-card p-6">
           <h2 className="text-lg font-semibold">Topic coverage</h2>
-          <p className="text-muted-foreground text-sm">Introduction to Python Programming</p>
+          <p className="text-muted-foreground text-sm">Across uploaded documents</p>
           <AsyncSection
             isLoading={analytics.isPending}
             error={analytics.error}
@@ -151,7 +159,9 @@ function AdminDashboard() {
           </AsyncSection>
           <div className="border-border mt-5 flex items-center justify-between border-t pt-4">
             <span className="text-muted-foreground text-sm">Overall coverage</span>
-            <span className="text-xl font-semibold">83%</span>
+            <span className="text-xl font-semibold">
+              {overallCoverage != null ? `${overallCoverage}%` : "—"}
+            </span>
           </div>
         </div>
       </div>
@@ -166,15 +176,15 @@ function AdminDashboard() {
               </Link>
             </Button>
           </div>
-          {catalogue.isPending && (
+          {recent.isPending && (
             <p className="text-muted-foreground mt-4 text-sm">Loading recent generations…</p>
           )}
-          {catalogue.error && (
+          {recent.error && (
             <p role="alert" className="text-destructive mt-4 text-sm">
-              Unable to load recent generations. {catalogue.error.message}
+              Unable to load recent generations. {recent.error.message}
             </p>
           )}
-          {!catalogue.isPending && !catalogue.error && history.length === 0 && (
+          {!recent.isPending && !recent.error && history.length === 0 && (
             <p className="text-muted-foreground mt-4 text-sm">No generations yet.</p>
           )}
           <div className="mt-4 divide-y">
@@ -199,7 +209,7 @@ function AdminDashboard() {
 
         <div className="surface-card p-6">
           <h2 className="text-lg font-semibold">Library snapshot</h2>
-          {!catalogue.isPending && !catalogue.error && documents.length === 0 && (
+          {!adminStats.isPending && !adminStats.error && documents.length === 0 && (
             <p className="text-muted-foreground mt-4 text-sm">No documents uploaded.</p>
           )}
           <div className="mt-4 space-y-3">
@@ -211,7 +221,8 @@ function AdminDashboard() {
               >
                 <p className="truncate text-sm font-medium">{d.title}</p>
                 <p className="text-muted-foreground mt-0.5 text-xs">
-                  {d.kind} · {d.pages} pages · {d.chunks} chunks · {d.status}
+                  {d.kind} · {d.pages != null ? `${d.pages} pages` : "—"} · {d.chunks} chunks ·{" "}
+                  {d.status}
                 </p>
               </Link>
             ))}

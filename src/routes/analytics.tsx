@@ -88,7 +88,10 @@ function Analytics() {
             errorTitle="Unable to load analytics"
             emptyTitle="No analytics yet"
             emptyMessage="Generate your first study assets to see quality and coverage metrics."
-            isEmpty={(d) => d.activitySeries.length === 0 && d.topicCoverage.length === 0}
+            isEmpty={(d) =>
+              d.activitySeries.every((p) => p.questions === 0 && p.flashcards === 0) &&
+              d.topicCoverage.length === 0
+            }
             onRetry={() => void refetch()}
           >
             {({ activitySeries, bloomDistribution, topicCoverage, typeDistribution, summary }) => (
@@ -271,50 +274,71 @@ function Analytics() {
 
                   <div className="surface-card p-6">
                     <h2 className="text-lg font-semibold">Topic coverage</h2>
-                    <p className="text-muted-foreground text-sm">
-                      Introduction to Python Programming
-                    </p>
-                    <div className="mt-5 h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={topicCoverage} layout="vertical" margin={{ left: 16 }}>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="var(--border)"
-                            horizontal={false}
-                          />
-                          <XAxis
-                            type="number"
-                            domain={[0, 100]}
-                            stroke="var(--muted-foreground)"
-                            fontSize={12}
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <YAxis
-                            type="category"
-                            dataKey="topic"
-                            stroke="var(--muted-foreground)"
-                            fontSize={12}
-                            width={80}
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} />
-                          <Bar dataKey="pct" radius={[0, 8, 8, 0]}>
-                            {topicCoverage.map((t, i) => (
-                              <Cell
-                                key={i}
-                                fill={t.covered ? "var(--chart-1)" : "var(--chart-5)"}
+                    <p className="text-muted-foreground text-sm">Across uploaded documents</p>
+                    {topicCoverage.length === 0 ? (
+                      <div className="text-muted-foreground mt-8 flex h-40 items-center justify-center text-center text-sm">
+                        No coverage data yet — upload documents to see syllabus coverage.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-5 h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={topicCoverage} layout="vertical" margin={{ left: 16 }}>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="var(--border)"
+                                horizontal={false}
                               />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <p className="text-muted-foreground mt-3 text-sm">
-                      Overall coverage <span className="text-foreground font-semibold">83%</span> ·
-                      Classes and Files still need question sets.
-                    </p>
+                              <XAxis
+                                type="number"
+                                domain={[0, 100]}
+                                stroke="var(--muted-foreground)"
+                                fontSize={12}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                              <YAxis
+                                type="category"
+                                dataKey="topic"
+                                stroke="var(--muted-foreground)"
+                                fontSize={12}
+                                width={80}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                              <Tooltip
+                                contentStyle={tooltipStyle}
+                                cursor={{ fill: "var(--muted)" }}
+                              />
+                              <Bar dataKey="pct" radius={[0, 8, 8, 0]}>
+                                {topicCoverage.map((t, i) => (
+                                  <Cell
+                                    key={i}
+                                    fill={t.covered ? "var(--chart-1)" : "var(--chart-5)"}
+                                  />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-muted-foreground mt-3 text-sm">
+                          Overall coverage{" "}
+                          <span className="text-foreground font-semibold">
+                            {Math.round(
+                              topicCoverage.reduce((n, t) => n + t.pct, 0) / topicCoverage.length,
+                            )}
+                            %
+                          </span>{" "}
+                          ·{" "}
+                          {topicCoverage.filter((t) => !t.covered).length > 0
+                            ? `${topicCoverage
+                                .filter((t) => !t.covered)
+                                .map((t) => t.topic)
+                                .join(", ")} still need question sets.`
+                            : "All topics covered."}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </>

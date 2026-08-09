@@ -2,6 +2,7 @@
 import * as workspaceApi from "@/api/workspace.api";
 import * as supabaseApi from "@/api/supabase.api";
 import { isMockMode } from "@/config/env";
+import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { attempt } from "@/lib/result";
 import type { Result } from "@/types/api/common";
@@ -137,11 +138,38 @@ export const WorkspaceService = {
   async updateWorkspace(
     input: Parameters<typeof workspaceApi.updateWorkspace>[0],
   ): Promise<Result<void>> {
-    return attempt("WorkspaceService.updateWorkspace", () => workspaceApi.updateWorkspace(input));
+    return attempt("WorkspaceService.updateWorkspace", async () => {
+      await workspaceApi.updateWorkspace(input);
+      if (!isMockMode()) {
+        // FastAPI is the source of truth; keep the Supabase mirror (the FK
+        // target for generations/history) in step. Best-effort: a Supabase
+        // hiccup must never fail a rename that already succeeded in FastAPI.
+        try {
+          await supabaseApi.updateWorkspaceMirror(input.id, input.patch);
+        } catch (error) {
+          logger.warn(
+            "Supabase workspace mirror update failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    });
   },
 
   async removeWorkspace(id: string): Promise<Result<void>> {
-    return attempt("WorkspaceService.removeWorkspace", () => workspaceApi.deleteWorkspace(id));
+    return attempt("WorkspaceService.removeWorkspace", async () => {
+      await workspaceApi.deleteWorkspace(id);
+      if (!isMockMode()) {
+        try {
+          await supabaseApi.deleteWorkspaceMirror(id);
+        } catch (error) {
+          logger.warn(
+            "Supabase workspace mirror delete failed",
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    });
   },
 
   /** Ensures a workspace id is unique against the ids already known locally. */

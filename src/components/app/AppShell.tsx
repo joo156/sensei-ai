@@ -365,10 +365,6 @@ function WorkspaceSwitcher() {
   const [editing, setEditing] = useState<Workspace | null>(null);
   const [deleting, setDeleting] = useState<Workspace | null>(null);
 
-  // Owner + admins manage a workspace; everyone else just uses it.
-  const canManage = (w: Workspace) =>
-    user?.role === "admin" || (user?.id != null && user.id === w.owner.id);
-
   if (workspaces.length === 0) {
     return (
       <>
@@ -466,38 +462,36 @@ function WorkspaceSwitcher() {
                     </span>
                   </span>
                 </button>
-                {canManage(w) && (
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button
-                        aria-label={`Manage ${w.name}`}
-                        className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-48 p-1">
-                      <button
-                        onClick={() => {
-                          setOpen(false);
-                          setEditing(w);
-                        }}
-                        className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
-                      >
-                        <Pencil className="size-4" /> Rename / details
-                      </button>
-                      <button
-                        onClick={() => {
-                          setOpen(false);
-                          setDeleting(w);
-                        }}
-                        className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
-                      >
-                        <Trash2 className="size-4" /> Delete workspace
-                      </button>
-                    </PopoverContent>
-                  </Popover>
-                )}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      aria-label={`Manage ${w.name}`}
+                      className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-48 p-1">
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        setEditing(w);
+                      }}
+                      className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+                    >
+                      <Pencil className="size-4" /> Rename / details
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        setDeleting(w);
+                      }}
+                      className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+                    >
+                      <Trash2 className="size-4" /> Delete workspace
+                    </button>
+                  </PopoverContent>
+                </Popover>
               </div>
             ))}
           </div>
@@ -514,7 +508,13 @@ function WorkspaceSwitcher() {
       </Popover>
 
       <CreateWorkspaceDialog open={creating} onOpenChange={setCreating} />
-      {editing && <EditWorkspaceDialog workspace={editing} open onOpenChange={(v) => !v && setEditing(null)} />}
+      {editing && (
+        <EditWorkspaceDialog
+          workspace={editing}
+          open
+          onOpenChange={(v) => !v && setEditing(null)}
+        />
+      )}
       {deleting && (
         <DeleteWorkspaceDialog
           workspace={deleting}

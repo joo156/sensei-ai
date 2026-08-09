@@ -59,7 +59,15 @@ export interface WorkspaceMirrorRow {
   accent: string | null;
 }
 
-/** Idempotently mirror FastAPI workspaces into Supabase (owner-scoped). */
+/**
+ * Mirror FastAPI workspaces into Supabase (owner-scoped).
+ *
+ * Insert-only (`ignoreDuplicates`): existing rows are left untouched so a
+ * bootstrap never rewrites a row that already exists. Rewriting would fire a
+ * `postgres_changes` Realtime event back into the frontend, which invalidates
+ * the bootstrap query and refetches — an infinite loop. Renames/deletes are
+ * pushed one row at a time via `updateWorkspaceMirror`/`deleteWorkspaceMirror`.
+ */
 export async function syncWorkspaces(rows: WorkspaceMirrorRow[]): Promise<void> {
   for (const row of rows) {
     // `workspaces.id` is `uuid`; FastAPI ids in any other shape cannot be
@@ -80,6 +88,21 @@ export async function syncWorkspaces(rows: WorkspaceMirrorRow[]): Promise<void> 
       );
     }
   }
+}
+
+/** Push a single workspace rename/description change into the Supabase mirror. */
+export async function updateWorkspaceMirror(
+  id: string,
+  patch: { name?: string; description?: string | null; subject?: string },
+): Promise<void> {
+  const { error } = await supabase.from("workspaces").update(patch).eq("id", id);
+  if (error) throw error;
+}
+
+/** Remove the Supabase mirror row so it cannot linger after a FastAPI delete. */
+export async function deleteWorkspaceMirror(id: string): Promise<void> {
+  const { error } = await supabase.from("workspaces").delete().eq("id", id);
+  if (error) throw error;
 }
 
 /** Every workspace the caller may see (staff: all; owner: own) with owner info. */
