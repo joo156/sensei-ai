@@ -24,16 +24,14 @@ Base URL: `VITE_API_BASE_URL`. All routes expect `Authorization: Bearer <supabas
 `POST /documents/{id}/embed` → `{ "documentId": "doc-1", "embedded": 412, "model": "text-embedding-3-small" }`
 `GET /documents?workspace_id=` → `{ "documents": [ ... ] }`
 `GET /documents/{id}/chunks` → `{ "chunks": [ ... ] }`
-`PATCH /documents/{id}/notes` `{ "notes": "..." }` → `204`
+`PATCH /documents/{id}` `{ "title?" | "notes?" | "tags?" }` → `204`
 `DELETE /documents/{id}` → `204`
 
 ## Generation
 
 Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini", "options": {} }`
 
-`POST /generate/questions` (+`count`, `difficulty`, `types`) →
-
-```json
+`POST /generate/questions` (+`count`, `difficulty`, `types`) →```json
 {
   "generationId": "gen-1",
   "kind": "question_bank",
@@ -61,6 +59,7 @@ Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini
 
 `POST /generate/test-help` → same shape (`options.durationMinutes`).
 `POST /generate/flashcards` → `{ "generationId": "...", "kind": "flashcards", "flashcards": [ { "front": "...", "back": "..." } ] }`
+`POST /generate/flashcard-topics` → suggested topics for the flashcard form
 `POST /generate/study-plan` (+`days`, `hoursPerDay`) → `{ "generationId": "...", "kind": "study_plan", "summary": "...", "sections": [], "days": [ { "day": 1, "topics": ["..."], "hours": 2 } ] }`
 `POST /generate/revision` → `{ "generationId": "...", "kind": "revision_sheet", "summary": "...", "sections": [], "weakTopics": [ { "topic": "...", "strength": 42, "action": "..." } ] }`
 
@@ -81,6 +80,7 @@ Common body: `{ "workspaceId": "...", "documentIds": ["doc-1"], "model": "gemini
 ## Review
 
 `GET /review?workspace_id=` → `{ "itemIds": ["q-1"] }`
+`GET /review/items?workspace_id=` → `{ "items": [ { "id", "kind", "status", "items": 2, "createdAt" } ] }` (reload-safe pending queue)
 `POST /review/approve` | `/review/reject` | `/review/needs-edit` | `/review/flag` | `/review/comment`
 body `{ "workspaceId", "itemId", "comment?", "label?" }` →
 
@@ -101,6 +101,35 @@ body `{ "workspaceId", "itemId", "comment?", "label?" }` →
 ```
 
 `GET /review/audit?workspace_id=` → `{ "audit": [ ... ] }`
+
+## Export
+
+`POST /exports` `{ "workspaceId", "format": "csv"|"json", "title", "output_id?" }` →
+file attachment; `Content-Disposition` carries the filename.
+`GET /exports?workspace_id=` → `{ "exports": [ { "id", "format", "status", "created_at" } ] }`
+Approved content only — an unapproved item returns `403 not_exportable`.
+
+## Search
+
+`GET /search?q=&workspace_id=` → scored matches across documents, questions,
+flashcards and history, each with chunk citations.
+
+## Catalogue & pipeline
+
+`GET /agents` → the 7-agent catalogue · `GET /agents/{slug}` → agent detail
+`GET /pipeline/steps` · `GET /pipeline/stages` → pipeline visualisation data
+`GET /notifications` → `{ "notifications": [...] }` · `POST /notifications/{id}/read` ·
+`POST /notifications/read-all`
+`GET /catalogue` → combined catalogue payload
+
+## Admin
+
+`GET /admin/stats` → `{ "documents", "questions", "quality", "chunksIndexed" }`
+(staff only, site-wide totals from the platform database).
+
+## Health
+
+`GET /health` → `{ "status": "ok" }` (no auth required — used by `BackendStatus`).
 
 ## History & analytics
 

@@ -1,5 +1,5 @@
 /** Catalogue endpoints: agents, pipeline stages, notifications, demo catalogue. */
-import { delay, http } from "./http";
+import { delay, http, HttpError } from "./http";
 import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import {
@@ -39,9 +39,19 @@ export async function getAgent(slug: string): Promise<GetAgentResponse> {
 /** GET /pipeline/steps */
 export async function getPipelineSteps(workspaceId?: string): Promise<ListPipelineStepsResponse> {
   if (!isMockMode()) {
-    return http.get<ListPipelineStepsResponse>(
-      `${paths.catalogue.pipelineSteps}${workspaceId ? `?workspace_id=${workspaceId}` : ""}`,
-    );
+    const url = `${paths.catalogue.pipelineSteps}${workspaceId ? `?workspace_id=${workspaceId}` : ""}`;
+    try {
+      return await http.get<ListPipelineStepsResponse>(url);
+    } catch (err) {
+      // The backend does not serve /pipeline/steps yet (Phase 8 gap), so a 404
+      // would dead-end the whole page. Fall back to the seeded nine-stage view
+      // so the RAG pipeline page keeps rendering.
+      if (err instanceof HttpError && err.status === 404) {
+        await delay(120);
+        return { steps: seedPipeline, completed: 7 };
+      }
+      throw err;
+    }
   }
   await delay(260);
   return { steps: seedPipeline, completed: 7 };

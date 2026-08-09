@@ -1,24 +1,47 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, ChevronLeft, ChevronRight, Heart, RotateCw, Shuffle } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Heart,
+  RotateCw,
+  Shuffle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Citation } from "@/types/domain";
 
 export interface Flashcard {
   id: string;
   front: string;
   back: string;
   topic?: string;
+  format?: string;
+  citations?: Citation[];
 }
 
-export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
+export function FlashcardDeck({
+  cards: initial,
+  favorites,
+  onToggleFavorite,
+}: {
+  cards: Flashcard[];
+  /** Front-text keys the user has favorited (persisted via FavoriteService). */
+  favorites?: Set<string>;
+  /** When provided, toggling delegates persistence to the caller. */
+  onToggleFavorite?: (card: Flashcard) => void;
+}) {
   const [cards, setCards] = useState(initial);
   const [i, setI] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [favs, setFavs] = useState<Set<string>>(new Set());
+  const [favs, setFavs] = useState<Set<string>>(favorites ?? new Set());
   const [hard, setHard] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"study" | "quiz">("study");
+
+  useEffect(() => setFavs(favorites ?? new Set()), [favorites]);
 
   useEffect(() => setFlipped(false), [i, mode]);
 
@@ -54,10 +77,14 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
   };
 
   const toggleFav = () => {
+    if (onToggleFavorite) {
+      onToggleFavorite(current);
+      return;
+    }
     setFavs((s) => {
       const n = new Set(s);
-      if (n.has(current.id)) n.delete(current.id);
-      else n.add(current.id);
+      if (n.has(current.front)) n.delete(current.front);
+      else n.add(current.front);
       return n;
     });
   };
@@ -97,7 +124,6 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
           <Shuffle className="size-3.5" /> Shuffle
         </Button>
       </div>
-
       <div className="[perspective:1600px]">
         <motion.button
           type="button"
@@ -116,15 +142,18 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
               Click or press Space to flip
             </span>
           </div>
-          <div className="surface-card absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
+          <div className="surface-card absolute inset-0 flex flex-col gap-4 overflow-y-auto p-8 text-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
             <span className="text-primary text-[11px] font-semibold tracking-widest uppercase">
               {mode === "quiz" ? "Answer" : "Back"}
+              {current.format ? ` · ${current.format}` : ""}
             </span>
             <p className="text-xl leading-relaxed">{current.back}</p>
+            {current.citations && current.citations.length > 0 && (
+              <CardReferences citations={current.citations} />
+            )}
           </div>
         </motion.button>
       </div>
-
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
         <Button variant="outline" size="sm" onClick={prev}>
           <ChevronLeft className="size-4" /> Prev
@@ -144,9 +173,9 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
           variant="ghost"
           size="sm"
           onClick={toggleFav}
-          className={cn(favs.has(current.id) && "text-destructive")}
+          className={cn(favs.has(current.front) && "text-destructive")}
         >
-          <Heart className={cn("size-3.5", favs.has(current.id) && "fill-current")} /> Favorite
+          <Heart className={cn("size-3.5", favs.has(current.front) && "fill-current")} /> Favorite
         </Button>
         <Button variant="outline" size="sm" onClick={next}>
           Next <ChevronRight className="size-4" />
@@ -155,7 +184,39 @@ export function FlashcardDeck({ cards: initial }: { cards: Flashcard[] }) {
       <p className="text-muted-foreground mt-3 text-center text-[11px]">
         {hard.size} marked difficult · {favs.size} favorited · Spaced repetition prioritises
         difficult cards next session
-      </p>
+      </p>{" "}
+    </div>
+  );
+}
+
+function CardReferences({ citations }: { citations: Citation[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-auto w-full border-t pt-3 text-left">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "border-border text-muted-foreground inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors hover:border-primary/40 hover:text-primary",
+          open && "border-primary/40 text-primary",
+        )}
+      >
+        <BookOpen className="size-3.5" />
+        {open ? "Hide sources" : `Show sources (${citations.length})`}
+      </button>
+      {open && (
+        <div className="border-border mt-2 max-h-40 space-y-2 overflow-y-auto border-l-2 pl-3">
+          {citations.map((c, i) => (
+            <div key={`${c.chunk ?? c.doc}-${i}`} className="text-xs leading-relaxed">
+              <p className="text-primary font-semibold">
+                Source · {c.chunk ?? c.doc.slice(0, 8)}
+                {c.page ? ` · p.${c.page}` : ""}
+              </p>
+              <p className="text-muted-foreground line-clamp-3">{c.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

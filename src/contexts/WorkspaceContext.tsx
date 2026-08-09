@@ -14,7 +14,8 @@ import { supabase } from "@/lib/supabase";
 import { isMockMode } from "@/config/env";
 import { logger } from "@/lib/logger";
 import { useAuth } from "@/contexts/AuthContext";
-import { DocumentService, WorkspaceService } from "@/services";
+import { DocumentService, HistoryService, WorkspaceService } from "@/services";
+import type { PersistGenerationMeta } from "@/services/HistoryService";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { ErrorState, LoadingState } from "@/components/app/AsyncState";
 import type {
@@ -44,6 +45,10 @@ interface WorkspaceCtx {
   active: Workspace | null;
   setActive: (id: string) => void;
   addWorkspace: (input: { name: string; description: string }) => Promise<Workspace>;
+  /** Rename / re-describe a workspace. */
+  updateWorkspace: (id: string, patch: { name?: string; description?: string }) => Promise<void>;
+  /** Remove a workspace (owner + admin) and its local data. */
+  removeWorkspace: (id: string) => Promise<void>;
   /** Refetch the workspace list from the server. */
   refreshWorkspaces: () => void;
   /** Data scoped to the active workspace — switching swaps everything. */
@@ -62,7 +67,7 @@ interface WorkspaceCtx {
   /** Workspace-scoped write-back */
   addChat: (chat: WsChat) => void;
   appendChatMessage: (chatId: string, message: WsChat["messages"][number]) => void;
-  addHistory: (row: WsHistoryRow) => void;
+  addHistory: (row: WsHistoryRow, meta?: PersistGenerationMeta) => void;
 }
 
 const Ctx = createContext<WorkspaceCtx | null>(null);
@@ -169,7 +174,19 @@ function WorkspaceStore({
       const ids = new Set(seedWorkspaces.map((w) => w.id));
       if (parsed) {
         if (parsed.store) {
-          setStore(Object.fromEntries(Object.entries(parsed.store).filter(([id]) => ids.has(id))));
+          // The generation run log is not persisted locally anymore (Phase 8):
+          // restore only the draft fields (notes, chats, audit, review state)
+          // from the local snapshot and KEEP the Supabase-backed run log that
+          // the bootstrap just fetched. Overwriting the whole store would wipe
+          // history on every reload.
+          const next: Record<string, WorkspaceData> = {};
+          for (const id of ids) {
+            const seed = seedStore[id];
+            if (!seed) continue;
+            const local = parsed.store[id];
+            next[id] = local ? { ...local, history: seed.history } : seed;
+          }
+          setStore(next);
         }
         if (parsed.activeId && ids.has(parsed.activeId)) setActiveId(parsed.activeId);
       } else {
@@ -180,7 +197,7 @@ function WorkspaceStore({
       /* ignore */
     }
     hydrated.current = true;
-  }, [seedWorkspaces]);
+  }, [seedWorkspaces, seedStore]);
 
   // The server list is authoritative: whenever the bootstrap query refreshes
   // (window focus, reconnect, or invalidation after a mutation), propagate it
@@ -190,12 +207,17 @@ function WorkspaceStore({
   }, [seedWorkspaces]);
 
   // Persist everything so notes, chats and review history survive a reload.
+  // The generation run log is excluded: since Phase 8 it lives in Supabase
+  // (`generations` + `history`) and is re-fetched at bootstrap.
   useEffect(() => {
     if (!hydrated.current) return;
     try {
+      const withoutHistory = Object.fromEntries(
+        Object.entries(store).map(([id, d]) => [id, { ...d, history: [] }]),
+      );
       window.localStorage.setItem(
         STATE_KEY,
-        JSON.stringify({ activeId, workspaces, store } satisfies PersistShape),
+        JSON.stringify({ activeId, workspaces, store: withoutHistory } satisfies PersistShape),
       );
       window.localStorage.setItem(STORAGE_KEY, activeId ?? "");
     } catch {
@@ -243,6 +265,25 @@ function WorkspaceStore({
         setActiveId(workspace.id);
         void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
         return workspace;
+      },
+      updateWorkspace: async (id, patch) => {
+        const result = await WorkspaceService.updateWorkspace({ id, patch });
+        if (!result.success) throw new Error(result.error.message);
+        setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      },
+      removeWorkspace: async (id) => {
+        const result = await WorkspaceService.removeWorkspace(id);
+        if (!result.success) throw new Error(result.error.message);
+        const remaining = workspaces.filter((w) => w.id !== id);
+        setWorkspaces(remaining);
+        setStore((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        if (activeId === id) setActiveId(remaining[0]?.id ?? null);
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
       },
       data,
       addDoc: async (doc) => {
@@ -314,12 +355,33 @@ function WorkspaceStore({
           ),
         }));
       },
-      addHistory: (row) => {
+      addHistory: (row, meta) => {
         if (!active) return;
         mutate(active.id, (d) => ({ ...d, history: [row, ...d.history] }));
+        if (meta?.kind) {
+          // Phase 8: generations live in Supabase (payload + review queue).
+          void HistoryService.appendSupabase(active.id, row, meta).catch((err) =>
+            logger.error("Failed to persist generation to Supabase", err),
+          );
+        } else {
+          // Legacy FastAPI run log (mock mode / plain session rows).
+          void HistoryService.append(active.id, row).catch((err) =>
+            logger.warn("Failed to persist history row", err),
+          );
+        }
       },
     };
-  }, [activeId, queryClient, setActive, store, mutate, workspaces]);
+  }, [
+    activeId,
+    queryClient,
+    setActive,
+    store,
+    mutate,
+    workspaces,
+    setStore,
+    setWorkspaces,
+    setActiveId,
+  ]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

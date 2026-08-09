@@ -57,10 +57,15 @@ function SettingsPage() {
             {MODELS.map((m) => (
               <div
                 key={m.id}
-                className={`border-border rounded-xl border p-3 text-sm ${model === m.id ? "border-primary bg-primary/5" : ""}`}
+                className={`border-border rounded-xl border p-3 text-sm ${model === m.id ? "border-primary bg-primary/5" : ""} ${!m.available ? "opacity-70" : ""}`}
               >
-                <p className="font-semibold">
+                <p className="flex items-center gap-2 font-semibold">
                   {m.name} <span className="text-muted-foreground text-xs">· {m.vendor}</span>
+                  {!m.available && (
+                    <span className="bg-warning/15 text-warning rounded-full px-1.5 py-0.5 text-[10px] font-semibold">
+                      Soon
+                    </span>
+                  )}
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">{m.desc}</p>
               </div>

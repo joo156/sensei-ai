@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -13,21 +13,31 @@ import {
   Pencil,
   Quote,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
 import { RoleGate } from "@/components/app/RoleGate";
-import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewBadge, NeutralBadge, DifficultyBadge } from "@/components/app/badges";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { ExportService, ReviewService } from "@/services";
+import { REVIEW_STATUS_TO_STATE } from "@/services/ReviewService";
+import { KIND_TO_AGENT } from "@/services/HistoryService";
 import { getReviewItems } from "@/api/review.api";
 import { isMockMode } from "@/config/env";
 import type { GeneratedQuestion, ReviewState } from "@/types/domain";
 import type { WsAuditEntry } from "@/types/domain";
+import type { Citation } from "@/types/domain";
 import type { ReviewItem } from "@/types/api/review.contracts";
+import type {
+  DbGenerationWithCreator,
+  DbReview,
+  GenerationKind,
+  ReviewStatus,
+} from "@/types/database.types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -60,17 +70,90 @@ type FilterId = "all" | "flagged" | "pending" | "approved" | "rejected";
 const GROUNDING_TARGET = 98;
 const QUALITY_TARGET = 8.5;
 
-function flagsFor(q: GeneratedQuestion): string[] {
+/** A single reviewable output item, normalised across generator payloads. */
+interface ReviewableItem {
+  key: string;
+  itemId: string;
+  generationId: string;
+  workspaceId: string;
+  kind: GenerationKind;
+  agent: string;
+  doc: string;
+  created: string;
+  creatorName: string | null;
+  workspaceName: string | null;
+  review: ReviewState;
+  flags: string[];
+  prompt: string;
+  type: string;
+  difficulty: string;
+  options: string[];
+  answer: string;
+  rationale: string;
+  quality: number;
+  grounded: number;
+  citations: Citation[];
+}
+
+function flagsForItem(q: ReviewableItem): string[] {
   const f: string[] = [];
-  if (q.grounded < GROUNDING_TARGET)
+  if (q.grounded > 0 && q.grounded < GROUNDING_TARGET)
     f.push(`Grounding ${q.grounded}% below ${GROUNDING_TARGET}% target`);
-  if (q.quality < QUALITY_TARGET)
+  if (q.quality > 0 && q.quality < QUALITY_TARGET)
     f.push(`Quality ${q.quality.toFixed(1)}/10 below ${QUALITY_TARGET} target`);
   if (!q.citations?.length) f.push("No supporting chunk attached");
   if (q.citations?.some((c) => c.score < 0.75)) f.push("Weak retrieval match on a cited chunk");
   if (q.options && new Set(q.options).size !== q.options.length)
     f.push("Duplicate distractor detected");
   return f;
+}
+
+function stateToStatus(state: ReviewState): ReviewStatus {
+  switch (state) {
+    case "Approved":
+      return "approved";
+    case "Rejected":
+      return "rejected";
+    case "Needs Edit":
+      return "needs_edit";
+    default:
+      return "pending";
+  }
+}
+
+function reviewStateFromStatus(status: ReviewStatus): ReviewState {
+  return REVIEW_STATUS_TO_STATE[status] ?? "Pending";
+}
+
+/** Map a FastAPI review item (mock mode) onto the shared queue shape. */
+function reviewItemToQueueItem(item: ReviewItem, workspaceName: string): ReviewableItem[] {
+  const questions = (item.payload?.questions ?? []) as Partial<GeneratedQuestion>[];
+  const kind = item.kind as GenerationKind;
+  return questions
+    .filter((q) => q?.id)
+    .map((q) => ({
+      key: `${item.id}:${q.id}`,
+      itemId: String(q.id),
+      generationId: item.id,
+      workspaceId: "",
+      kind,
+      agent: KIND_TO_AGENT[kind] ?? item.kind,
+      doc: item.id,
+      created: (item.created_at ?? "").slice(0, 16).replace("T", " "),
+      creatorName: null,
+      workspaceName,
+      review: reviewStateFromItem(item),
+      flags: [],
+      prompt: String(q.prompt ?? item.id),
+      type: String(q.type ?? "MCQ"),
+      difficulty: String(q.difficulty ?? "Beginner"),
+      options: q.options ?? [],
+      answer: String(q.answer ?? ""),
+      rationale: String(q.rationale ?? ""),
+      quality: Number(q.quality ?? 0),
+      grounded: Number(q.grounded ?? 0),
+      citations: (q.citations as Citation[]) ?? [],
+    }));
 }
 
 /** Backend output status → UI review state. */
@@ -88,84 +171,178 @@ function reviewStateFromItem(item: ReviewItem): ReviewState {
   }
 }
 
-/**
- * Merge backend review items with the local draft list, de-duplicating by id.
- * The backend item's persisted status wins so a reload shows the real decision.
- */
-function mergeItems(local: GeneratedQuestion[], dbItems: ReviewItem[]): GeneratedQuestion[] {
-  const byId = new Map<string, GeneratedQuestion>();
-  for (const q of local) byId.set(q.id, q);
-  for (const item of dbItems) {
-    const review = reviewStateFromItem(item);
-    const questions = (item.payload?.questions ?? []) as Partial<GeneratedQuestion>[];
-    if (questions.length === 0) continue;
-    for (const partial of questions) {
-      if (!partial?.id) continue;
-      byId.set(partial.id, {
-        id: partial.id,
-        prompt: String(partial.prompt ?? item.id),
-        type: (partial.type as GeneratedQuestion["type"]) ?? "MCQ",
-        difficulty: (partial.difficulty as GeneratedQuestion["difficulty"]) ?? "Beginner",
-        options: partial.options ?? [],
-        answer: String(partial.answer ?? ""),
-        rationale: String(partial.rationale ?? ""),
-        bloom: (partial.bloom as GeneratedQuestion["bloom"]) ?? "Understanding",
-        quality: Number(partial.quality ?? 0),
-        grounded: Number(partial.grounded ?? 0),
-        estMinutes: Number(partial.estMinutes ?? 2),
-        review,
-        citations: (partial.citations as GeneratedQuestion["citations"]) ?? [],
-      });
-    }
+/** Flatten a Supabase generation payload into queue items (per generator kind). */
+function generationToItems(g: DbGenerationWithCreator): ReviewableItem[] {
+  const payload = (g.payload ?? {}) as Record<string, unknown>;
+  const base = {
+    generationId: g.id,
+    workspaceId: g.workspace_id,
+    kind: g.kind,
+    agent: KIND_TO_AGENT[g.kind] ?? g.kind,
+    doc: g.title ?? g.kind,
+    created: (g.created_at ?? "").slice(0, 16).replace("T", " "),
+    creatorName: g.creator_name,
+    workspaceName: g.workspace_name,
+    review: reviewStateFromStatus(g.review_status),
+  };
+
+  const items: Omit<ReviewableItem, "key" | "itemId" | "flags" | "review">[] = [];
+
+  for (const q of (payload.questions as Partial<GeneratedQuestion>[] | undefined) ?? []) {
+    if (!q?.id) continue;
+    items.push({
+      ...base,
+      prompt: String(q.prompt ?? ""),
+      type: String(q.type ?? "MCQ"),
+      difficulty: String(q.difficulty ?? "Beginner"),
+      options: q.options ?? [],
+      answer: String(q.answer ?? ""),
+      rationale: String(q.rationale ?? ""),
+      quality: Number(q.quality ?? 0),
+      grounded: Number(q.grounded ?? 0),
+      citations: (q.citations as Citation[]) ?? [],
+    });
   }
-  return Array.from(byId.values());
+
+  for (const card of (payload.flashcards as Record<string, unknown>[] | undefined) ?? []) {
+    if (!card?.id) continue;
+    items.push({
+      ...base,
+      prompt: String(card.front ?? ""),
+      type: "Flashcard",
+      difficulty: String(card.topic ?? ""),
+      options: [],
+      answer: String(card.back ?? ""),
+      rationale: String(card.topic ?? ""),
+      quality: 0,
+      grounded: 0,
+      citations: (card.citations as Citation[]) ?? [],
+    });
+  }
+
+  for (const day of (payload.days as Record<string, unknown>[] | undefined) ?? []) {
+    items.push({
+      ...base,
+      prompt: `Day ${String(day.day ?? "")}`,
+      type: "Study Plan",
+      difficulty: "",
+      options: [],
+      answer: Array.isArray(day.topics)
+        ? (day.topics as string[]).join(" · ")
+        : String(day.topics ?? ""),
+      rationale: `${String(day.hours ?? "")}h planned for this day`,
+      quality: 0,
+      grounded: 0,
+      citations: [],
+    });
+  }
+
+  for (const topic of (payload.weakTopics as Record<string, unknown>[] | undefined) ?? []) {
+    items.push({
+      ...base,
+      prompt: String(topic.topic ?? ""),
+      type: "Revision",
+      difficulty: String(topic.difficulty ?? ""),
+      options: [],
+      answer: String(topic.action ?? ""),
+      rationale: String(topic.description ?? ""),
+      quality: Number(topic.strength ?? 0),
+      grounded: 0,
+      citations: [],
+    });
+  }
+
+  return items.map((partial, i) => {
+    const itemId = partial.prompt || `${g.id}-item-${i}`;
+    return {
+      ...partial,
+      itemId,
+      key: `${g.id}:${itemId}`,
+      review: base.review,
+      flags: [],
+    } as ReviewableItem;
+  });
+}
+
+function reviewsToAudit(reviews: DbReview[]): WsAuditEntry[] {
+  return reviews.map((r) => ({
+    id: r.id,
+    itemId: r.item_id,
+    itemLabel: r.item_id,
+    action: (r.status === "needs_edit"
+      ? "Needs Edit"
+      : r.status.charAt(0).toUpperCase() + r.status.slice(1)) as WsAuditEntry["action"],
+    actor: r.reviewer_id ? `Reviewer ${r.reviewer_id.slice(0, 6)}` : "System",
+    at: (r.created_at ?? "").slice(0, 16).replace("T", " "),
+    comment: r.comment ?? undefined,
+  }));
 }
 
 function Review() {
   const { active, data, setReview, addAudit } = useWorkspace();
+  const { user } = useAuth();
+  // Staff (reviewer/admin) review every workspace's queue; the workspace
+  // switcher must not scope the queue down to the staff member's own
+  // workspace. Owners (non-staff) see their own workspace.
+  const isStaff = user?.role === "reviewer" || user?.role === "admin";
   const [filter, setFilter] = useState<FilterId>("all");
   const [comments, setComments] = useState<Record<string, string>>({});
-  const [dbItems, setDbItems] = useState<ReviewItem[]>([]);
-  const [dbAudit, setDbAudit] = useState<WsAuditEntry[]>([]);
+  const [items, setItems] = useState<ReviewableItem[]>([]);
+  const [audit, setAudit] = useState<WsAuditEntry[]>([]);
 
-  // Real mode: hydrate the review queue and audit from the backend so decisions
-  // and items survive a reload (the backend is the source of truth, not the
-  // local WorkspaceContext).
-  useEffect(() => {
-    if (isMockMode() || !active) {
-      setDbItems([]);
-      setDbAudit([]);
+  const activeId = active?.id;
+
+  const hydrate = useCallback(() => {
+    if (isMockMode()) {
+      // Mock queue is scoped to an active workspace; staff without one get an
+      // empty state rather than a crash.
+      if (!activeId) {
+        setItems([]);
+        setAudit([]);
+        return;
+      }
+      void Promise.all([getReviewItems(activeId), ReviewService.auditHistory(activeId)])
+        .then(([res, history]) => {
+          setItems(
+            res.items.flatMap((item) => reviewItemToQueueItem(item, active?.name ?? "Workspace")),
+          );
+          setAudit(history);
+        })
+        .catch(() => {
+          setItems([]);
+          setAudit([]);
+        });
       return;
     }
-    let cancelled = false;
-    void Promise.all([getReviewItems(active.id), ReviewService.auditHistory(active.id)])
-      .then(([res, audit]) => {
-        if (!cancelled) {
-          setDbItems(res.items);
-          setDbAudit(audit);
-        }
+    // Real mode: staff read EVERY workspace (staff-wide queue); owners read
+    // their own. Omitting the workspace id resolves to the staff-wide path.
+    void ReviewService.hydrateQueue(isStaff ? undefined : activeId)
+      .then(({ generations, reviews }) => {
+        const reviewByItem = new Map(reviews.map((r) => [r.item_id, r]));
+        setItems(
+          generations.flatMap((g) =>
+            generationToItems(g).map((item) => {
+              const decided = reviewByItem.get(item.itemId);
+              return {
+                ...item,
+                review: decided ? reviewStateFromStatus(decided.status) : item.review,
+              };
+            }),
+          ),
+        );
+        setAudit(reviewsToAudit(reviews));
       })
       .catch(() => {
-        if (!cancelled) {
-          setDbItems([]);
-          setDbAudit([]);
-        }
+        setItems([]);
+        setAudit([]);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [active?.id]);
+  }, [activeId, active, isStaff]);
 
-  const items = useMemo(() => mergeItems(data.questions, dbItems), [data.questions, dbItems]);
-  const audit = useMemo(() => {
-    const merged = [...dbAudit];
-    for (const e of data.audit ?? []) {
-      if (!merged.some((m) => m.id === e.id)) merged.push(e);
-    }
-    return merged;
-  }, [dbAudit, data.audit]);
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
 
-  const flagged = useMemo(() => items.filter((q) => flagsFor(q).length > 0), [items]);
+  const flagged = useMemo(() => items.filter((q) => q.flags.length > 0), [items]);
 
   const counts = {
     all: items.length,
@@ -177,52 +354,81 @@ function Review() {
 
   const visible = items.filter((q) => {
     if (filter === "all") return true;
-    if (filter === "flagged") return flagsFor(q).length > 0;
+    if (filter === "flagged") return q.flags.length > 0;
     if (filter === "pending") return q.review === "Pending";
     if (filter === "approved") return q.review === "Approved";
     return q.review === "Rejected";
   });
 
-  const decide = async (q: GeneratedQuestion, state: ReviewState) => {
-    setReview(q.id, state, { comment: comments[q.id]?.trim() || undefined, label: q.prompt });
-    setComments((c) => ({ ...c, [q.id]: "" }));
-    if (!active || isMockMode()) return;
-    try {
-      await ReviewService.setState(state, {
-        workspaceId: active.id,
-        itemId: q.id,
-        comment: comments[q.id]?.trim(),
-        label: q.prompt,
+  const decide = async (q: ReviewableItem, state: ReviewState) => {
+    const comment = comments[q.key]?.trim();
+    setItems((prev) => prev.map((i) => (i.key === q.key ? { ...i, review: state } : i)));
+    setComments((c) => ({ ...c, [q.key]: "" }));
+
+    if (isMockMode() || !q.workspaceId) {
+      setReview(q.itemId, state, { comment: comment || undefined, label: q.prompt });
+      addAudit({
+        itemId: q.itemId,
+        itemLabel: q.prompt,
+        action: state as WsAuditEntry["action"],
+        actor: "You",
+        comment,
       });
-      const res = await getReviewItems(active.id);
-      setDbItems(res.items);
-      setDbAudit(await ReviewService.auditHistory(active.id));
-      toast.success(`${state} · saved to the backend audit history`);
+      toast.success(`${state} · recorded`);
+      return;
+    }
+
+    try {
+      const next = await ReviewService.decideItem({
+        generationId: q.generationId,
+        workspaceId: q.workspaceId,
+        itemId: q.itemId,
+        status: stateToStatus(state),
+        comment: comment || null,
+      });
+      setItems((prev) =>
+        prev.map((i) =>
+          i.generationId === q.generationId && i.review === "Pending"
+            ? { ...i, review: reviewStateFromStatus(next) }
+            : i,
+        ),
+      );
+      setAudit((prev) => [
+        {
+          id: `${q.itemId}-${Date.now().toString(36)}`,
+          itemId: q.itemId,
+          itemLabel: q.prompt,
+          action: state as WsAuditEntry["action"],
+          actor: "You",
+          at: new Date().toISOString().slice(0, 16).replace("T", " "),
+          comment,
+        },
+        ...prev,
+      ]);
+      toast.success(`${state} · saved to the review queue`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not persist the decision");
     }
   };
 
-  const onFlag = async (q: GeneratedQuestion) => {
-    addAudit({
-      itemId: q.id,
-      itemLabel: q.prompt,
-      action: "Flagged",
-      actor: "You",
-      comment: comments[q.id]?.trim() || "Manually flagged for a second opinion",
-    });
-    setComments((c) => ({ ...c, [q.id]: "" }));
+  const onFlag = async (q: ReviewableItem) => {
+    const comment = comments[q.key]?.trim() || "Manually flagged for a second opinion";
+    setComments((c) => ({ ...c, [q.key]: "" }));
     toast.info("Flagged for a second reviewer");
-    if (!active || isMockMode()) return;
+    if (isMockMode() || !q.workspaceId) {
+      addAudit({ itemId: q.itemId, itemLabel: q.prompt, action: "Flagged", actor: "You", comment });
+      return;
+    }
     try {
-      await ReviewService.flag({
-        workspaceId: active.id,
-        itemId: q.id,
-        comment: comments[q.id]?.trim(),
-        label: q.prompt,
+      await ReviewService.decideItem({
+        generationId: q.generationId,
+        workspaceId: q.workspaceId,
+        itemId: q.itemId,
+        status: "pending",
+        comment,
       });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not flag on the backend");
+      toast.error(err instanceof Error ? err.message : "Could not flag the item");
     }
   };
 
@@ -255,85 +461,79 @@ function Review() {
         </Button>
       }
     >
-      {!active ? (
-        <NoActiveWorkspace />
+      {items.length === 0 ? (
+        <div className="surface-card p-12 text-center">
+          <h3 className="font-semibold">Nothing to review yet</h3>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Generate outputs in the AI Studio and they will queue up here.
+          </p>
+        </div>
       ) : (
         <>
-          {items.length === 0 ? (
-            <div className="surface-card p-12 text-center">
-              <h3 className="font-semibold">Nothing to review in {active.name}</h3>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Generate outputs in the AI Studio and they will queue up here.
-              </p>
+          {counts.flagged > 0 && (
+            <div className="border-warning/35 bg-warning/10 mb-6 flex items-start gap-3 rounded-2xl border p-4">
+              <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium">
+                  {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic
+                  validation
+                </p>
+                <p className="text-muted-foreground mt-0.5 text-sm">
+                  Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below{" "}
+                  {QUALITY_TARGET}
+                  /10, retrieval match is weak, or distractors overlap.
+                </p>
+              </div>
             </div>
-          ) : (
-            <>
-              {counts.flagged > 0 && (
-                <div className="border-warning/35 bg-warning/10 mb-6 flex items-start gap-3 rounded-2xl border p-4">
-                  <AlertTriangle className="text-warning mt-0.5 size-5 shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium">
-                      {counts.flagged} output{counts.flagged > 1 ? "s" : ""} flagged by automatic
-                      validation
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 text-sm">
-                      Flags fire when grounding drops below {GROUNDING_TARGET}%, quality below{" "}
-                      {QUALITY_TARGET}
-                      /10, retrieval match is weak, or distractors overlap.
-                    </p>
-                  </div>
+          )}
+
+          <div className="mb-5 flex flex-wrap gap-1.5">
+            {(
+              [
+                ["all", "All"],
+                ["flagged", "Flagged"],
+                ["pending", "Pending"],
+                ["approved", "Approved"],
+                ["rejected", "Rejected"],
+              ] as [FilterId, string][]
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setFilter(id)}
+                className={cn(
+                  "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
+                  filter === id
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-primary/40",
+                )}
+              >
+                {label} · {counts[id]}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+            <div className="min-w-0 space-y-5">
+              {visible.length === 0 && (
+                <div className="surface-card p-10 text-center text-sm">
+                  No items match this filter.
                 </div>
               )}
+              {visible.map((q, i) => (
+                <ReviewItem
+                  key={q.key}
+                  q={q}
+                  index={i}
+                  comment={comments[q.key] ?? ""}
+                  onComment={(v) => setComments((c) => ({ ...c, [q.key]: v }))}
+                  onDecide={(s) => void decide(q, s)}
+                  onFlag={() => void onFlag(q)}
+                />
+              ))}
+            </div>
 
-              <div className="mb-5 flex flex-wrap gap-1.5">
-                {(
-                  [
-                    ["all", "All"],
-                    ["flagged", "Flagged"],
-                    ["pending", "Pending"],
-                    ["approved", "Approved"],
-                    ["rejected", "Rejected"],
-                  ] as [FilterId, string][]
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setFilter(id)}
-                    className={cn(
-                      "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
-                      filter === id
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40",
-                    )}
-                  >
-                    {label} · {counts[id]}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
-                <div className="min-w-0 space-y-5">
-                  {visible.length === 0 && (
-                    <div className="surface-card p-10 text-center text-sm">
-                      No items match this filter.
-                    </div>
-                  )}
-                  {visible.map((q, i) => (
-                    <ReviewItem
-                      key={q.id}
-                      q={q}
-                      index={i}
-                      comment={comments[q.id] ?? ""}
-                      onComment={(v) => setComments((c) => ({ ...c, [q.id]: v }))}
-                      onDecide={(s) => void decide(q, s)}
-                      onFlag={() => void onFlag(q)}
-                    />
-                  ))}
-                </div>
-
-                <AuditPanel entries={audit} />
-              </div>
-            </>
-          )}
+            <AuditPanel entries={audit} />
+          </div>
         </>
       )}
     </AppShell>
@@ -348,7 +548,7 @@ function ReviewItem({
   onDecide,
   onFlag,
 }: {
-  q: GeneratedQuestion;
+  q: ReviewableItem;
   index: number;
   comment: string;
   onComment: (v: string) => void;
@@ -356,7 +556,7 @@ function ReviewItem({
   onFlag: () => void;
 }) {
   const [open, setOpen] = useState(index === 0);
-  const flags = flagsFor(q);
+  const flags = q.flags.length > 0 ? q.flags : flagsForItem(q);
 
   return (
     <motion.article
@@ -369,7 +569,9 @@ function ReviewItem({
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <DifficultyBadge level={q.difficulty} />
+        {q.difficulty ? (
+          <DifficultyBadge level={q.difficulty as GeneratedQuestion["difficulty"]} />
+        ) : null}
         <NeutralBadge>{q.type}</NeutralBadge>
         <ReviewBadge state={q.review} />
         {flags.length > 0 && (
@@ -378,21 +580,40 @@ function ReviewItem({
           </span>
         )}
         <span className="ml-auto flex items-center gap-3 text-xs">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1",
-              q.grounded >= GROUNDING_TARGET ? "text-success" : "text-warning",
-            )}
-          >
-            <ShieldCheck className="size-3.5" /> {q.grounded}% grounded
+          <span className="text-muted-foreground">
+            {q.agent} · {q.doc} · {q.created}
           </span>
-          <span className="text-muted-foreground">{q.quality.toFixed(1)}/10</span>
+          {q.workspaceName && (
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              <BookOpen className="size-3.5" />
+              {q.workspaceName}
+            </span>
+          )}
+          {q.creatorName && (
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              <UserRound className="size-3.5" />
+              {q.creatorName}
+            </span>
+          )}
+          {q.grounded > 0 && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                q.grounded >= GROUNDING_TARGET ? "text-success" : "text-warning",
+              )}
+            >
+              <ShieldCheck className="size-3.5" /> {q.grounded}% grounded
+            </span>
+          )}
+          {q.quality > 0 && (
+            <span className="text-muted-foreground">{q.quality.toFixed(1)}/10</span>
+          )}
         </span>
       </div>
 
       <h3 className="mt-4 text-[15px] leading-relaxed font-medium">{q.prompt}</h3>
 
-      {q.options && (
+      {q.options.length > 0 && (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {q.options.map((opt) => (
             <li
@@ -435,13 +656,19 @@ function ReviewItem({
             className="overflow-hidden"
           >
             <div className="mt-3 space-y-3">
-              <div>
-                <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
-                  Answer key & rationale
-                </p>
-                <p className="mt-1 text-sm font-medium">{q.answer}</p>
-                <p className="text-muted-foreground mt-1 text-sm leading-relaxed">{q.rationale}</p>
-              </div>
+              {q.answer && (
+                <div>
+                  <p className="text-muted-foreground text-[11px] font-semibold tracking-widest uppercase">
+                    Answer key & rationale
+                  </p>
+                  <p className="mt-1 text-sm font-medium">{q.answer}</p>
+                  {q.rationale && (
+                    <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
+                      {q.rationale}
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="space-y-2">
                 {q.citations?.map((c) => (
                   <div key={c.chunk} className="border-border bg-muted/40 rounded-xl border p-3">
@@ -529,7 +756,7 @@ function AuditPanel({ entries }: { entries: WsAuditEntry[] }) {
                 <span
                   className={cn(
                     "rounded-full border px-2 py-0.5 text-[11px] font-semibold",
-                    actionTone[e.action],
+                    actionTone[e.action] ?? actionTone.Comment,
                   )}
                 >
                   {e.action}

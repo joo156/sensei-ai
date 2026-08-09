@@ -48,7 +48,7 @@ export const GenerationService = {
   },
 
   async generateFlashcards(
-    input: BaseInput & { count: number; topic: string },
+    input: BaseInput & { count: number; topic: string; format?: "term-definition" | "qa" },
   ): Promise<Result<Flashcard[]>> {
     return attempt("GenerationService.generate", async () => {
       const res = await getProvider(input.model).generateFlashcards({
@@ -56,13 +56,28 @@ export const GenerationService = {
         documentIds: [input.documentId].filter(Boolean),
         model: input.model,
         count: input.count,
+        cardFormat: input.format,
+        topic: input.topic,
       });
       return res.flashcards.map((c, i) => ({
         id: `card-${i}`,
         front: c.front,
         back: c.back,
-        topic: input.topic,
+        topic: c.topic ?? input.topic,
+        format: c.format,
+        citations: c.citations,
       }));
+    });
+  },
+
+  async flashcardTopics(input: BaseInput): Promise<Result<string[]>> {
+    return attempt("GenerationService.flashcardTopics", async () => {
+      const res = await getProvider(input.model).flashcardTopics({
+        workspaceId: input.workspaceId,
+        documentIds: [input.documentId].filter(Boolean),
+        model: input.model,
+      });
+      return res.topics;
     });
   },
 

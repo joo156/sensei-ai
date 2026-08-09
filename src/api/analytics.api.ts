@@ -4,6 +4,7 @@ import { paths } from "./paths";
 import { isMockMode } from "@/config/env";
 import {
   activitySeries,
+  analyticsSummary,
   bloomDistribution,
   topicCoverage,
   typeDistribution,
@@ -17,5 +18,11 @@ export async function getAnalytics(query: AnalyticsQuery): Promise<AnalyticsResp
     );
   }
   await delay(80);
-  return { bloomDistribution, typeDistribution, activitySeries, topicCoverage };
+  return {
+    bloomDistribution,
+    typeDistribution,
+    activitySeries,
+    topicCoverage,
+    summary: analyticsSummary,
+  };
 }

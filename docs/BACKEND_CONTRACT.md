@@ -38,6 +38,14 @@ Request/response JSON examples are in `docs/FASTAPI_INTEGRATION.md`; TypeScript 
 | Write history row           | `HistoryService.append`                   | `POST /history`                   | bearer        | member                            | 400           |
 | Analytics / reports         | `AnalyticsService.get`                    | `GET /analytics?workspace_id=`    | bearer        | admin (workspace metrics: member) | 403           |
 | Model catalogue             | `ModelService.fetch`                      | `GET /models`                     | bearer        | any                               | 401           |
+| Global search               | `SearchService.search`                    | `GET /search?q=&workspace_id=`    | bearer        | any member                        | 403           |
+| Export approved content     | `ExportService.exportApproved`            | `POST /exports`                   | bearer        | any member                        | 403 (not_exportable), 422 |
+| List exports                | `ExportService.list`                      | `GET /exports?workspace_id=`      | bearer        | member                            | 403           |
+| Admin dashboard stats       | `AdminService.stats`                      | `GET /admin/stats`                | bearer        | admin                             | 403           |
+| Backend health probe        | `BackendStatus` (component)               | `GET /health`                     | none          | any                               | —            |
+| Agent catalogue             | `AgentService`                            | `GET /agents` · `GET /agents/{slug}` | bearer     | any                               | 401           |
+| Notifications               | `NotificationService`                     | `GET /notifications` · `POST .../read` | bearer | any                            | 401           |
+| Pipeline stages             | (pipeline page)                           | `GET /pipeline/steps` · `/pipeline/stages` | bearer | any                    | 401           |
 
 ## Rules
 

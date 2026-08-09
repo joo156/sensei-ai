@@ -88,51 +88,54 @@ function Analytics() {
             errorTitle="Unable to load analytics"
             emptyTitle="No analytics yet"
             emptyMessage="Generate your first study assets to see quality and coverage metrics."
-            isEmpty={(d) => d.activitySeries.length === 0 && d.topicCoverage.length === 0}
+            isEmpty={(d) =>
+              d.activitySeries.every((p) => p.questions === 0 && p.flashcards === 0) &&
+              d.topicCoverage.length === 0
+            }
             onRetry={() => void refetch()}
           >
-            {({ activitySeries, bloomDistribution, topicCoverage, typeDistribution }) => (
+            {({ activitySeries, bloomDistribution, topicCoverage, typeDistribution, summary }) => (
               <>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <StatCard
                     label="Questions generated"
-                    value="480"
-                    delta="+91 this week"
+                    value={String(summary.questions)}
+                    delta="Across all workspaces"
                     icon={ListChecks}
                     index={0}
                   />
                   <StatCard
                     label="Flashcards created"
-                    value="666"
-                    delta="+148 this week"
+                    value={String(summary.flashcards)}
+                    delta="Across all workspaces"
                     icon={Layers}
                     index={1}
                   />
                   <StatCard
                     label="Study plans"
-                    value="18"
-                    delta="4 active this month"
+                    value={String(summary.studyPlans)}
+                    delta="Generated plans"
                     icon={BookOpen}
                     index={2}
                   />
                   <StatCard
                     label="Grounding success"
-                    value="98.4%"
-                    delta="Target 98%"
+                    value={summary.grounding != null ? `${summary.grounding}%` : "—"}
+                    delta="Mean citation coverage"
                     icon={ShieldCheck}
                     index={3}
                   />
                   <StatCard
                     label="Average quality"
-                    value="9.3 / 10"
-                    delta="Across 1.2k outputs"
+                    value={summary.quality != null ? `${summary.quality} / 10` : "—"}
+                    delta="Mean review score"
                     icon={Gauge}
                     index={4}
                   />
                   <StatCard
                     label="Review completion"
-                    value="86%"
-                    delta="14% awaiting a reviewer"
+                    value={summary.reviewCompletion != null ? `${summary.reviewCompletion}%` : "—"}
+                    delta="Of all reviewable runs"
                     icon={Timer}
                     index={5}
                   />
@@ -271,50 +274,71 @@ function Analytics() {
 
                   <div className="surface-card p-6">
                     <h2 className="text-lg font-semibold">Topic coverage</h2>
-                    <p className="text-muted-foreground text-sm">
-                      Introduction to Python Programming
-                    </p>
-                    <div className="mt-5 h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={topicCoverage} layout="vertical" margin={{ left: 16 }}>
-                          <CartesianGrid
-                            strokeDasharray="3 3"
-                            stroke="var(--border)"
-                            horizontal={false}
-                          />
-                          <XAxis
-                            type="number"
-                            domain={[0, 100]}
-                            stroke="var(--muted-foreground)"
-                            fontSize={12}
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <YAxis
-                            type="category"
-                            dataKey="topic"
-                            stroke="var(--muted-foreground)"
-                            fontSize={12}
-                            width={80}
-                            tickLine={false}
-                            axisLine={false}
-                          />
-                          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)" }} />
-                          <Bar dataKey="pct" radius={[0, 8, 8, 0]}>
-                            {topicCoverage.map((t, i) => (
-                              <Cell
-                                key={i}
-                                fill={t.covered ? "var(--chart-1)" : "var(--chart-5)"}
+                    <p className="text-muted-foreground text-sm">Across uploaded documents</p>
+                    {topicCoverage.length === 0 ? (
+                      <div className="text-muted-foreground mt-8 flex h-40 items-center justify-center text-center text-sm">
+                        No coverage data yet — upload documents to see syllabus coverage.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-5 h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={topicCoverage} layout="vertical" margin={{ left: 16 }}>
+                              <CartesianGrid
+                                strokeDasharray="3 3"
+                                stroke="var(--border)"
+                                horizontal={false}
                               />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <p className="text-muted-foreground mt-3 text-sm">
-                      Overall coverage <span className="text-foreground font-semibold">83%</span> ·
-                      Classes and Files still need question sets.
-                    </p>
+                              <XAxis
+                                type="number"
+                                domain={[0, 100]}
+                                stroke="var(--muted-foreground)"
+                                fontSize={12}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                              <YAxis
+                                type="category"
+                                dataKey="topic"
+                                stroke="var(--muted-foreground)"
+                                fontSize={12}
+                                width={80}
+                                tickLine={false}
+                                axisLine={false}
+                              />
+                              <Tooltip
+                                contentStyle={tooltipStyle}
+                                cursor={{ fill: "var(--muted)" }}
+                              />
+                              <Bar dataKey="pct" radius={[0, 8, 8, 0]}>
+                                {topicCoverage.map((t, i) => (
+                                  <Cell
+                                    key={i}
+                                    fill={t.covered ? "var(--chart-1)" : "var(--chart-5)"}
+                                  />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <p className="text-muted-foreground mt-3 text-sm">
+                          Overall coverage{" "}
+                          <span className="text-foreground font-semibold">
+                            {Math.round(
+                              topicCoverage.reduce((n, t) => n + t.pct, 0) / topicCoverage.length,
+                            )}
+                            %
+                          </span>{" "}
+                          ·{" "}
+                          {topicCoverage.filter((t) => !t.covered).length > 0
+                            ? `${topicCoverage
+                                .filter((t) => !t.covered)
+                                .map((t) => t.topic)
+                                .join(", ")} still need question sets.`
+                            : "All topics covered."}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               </>

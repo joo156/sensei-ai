@@ -153,6 +153,15 @@ function HistoryPage() {
                               <ExternalLink className="size-4" /> Open chat
                             </Button>
                           </a>
+                        ) : h.generationId ? (
+                          <Button asChild size="sm" variant="ghost">
+                            <Link
+                              to="/reopen/$generationId"
+                              params={{ generationId: h.generationId }}
+                            >
+                              Reopen
+                            </Link>
+                          </Button>
                         ) : (
                           <Button asChild size="sm" variant="ghost">
                             <Link to="/studio">Reopen</Link>

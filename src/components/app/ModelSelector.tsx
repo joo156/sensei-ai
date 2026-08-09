@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 import { ModelService } from "@/services/ModelService";
 
@@ -31,10 +32,20 @@ export function ModelSelector({
       </SelectTrigger>
       <SelectContent>
         {MODELS.map((m) => (
-          <SelectItem key={m.id} value={m.id}>
+          <SelectItem key={m.id} value={m.id} disabled={!m.available}>
             <span className="flex items-center gap-2">
               <span className="font-medium">{m.name}</span>
               <span className="text-muted-foreground text-[11px]">{m.vendor}</span>
+              {!m.available && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                    "bg-warning/15 text-warning",
+                  )}
+                >
+                  Soon
+                </span>
+              )}
             </span>
           </SelectItem>
         ))}

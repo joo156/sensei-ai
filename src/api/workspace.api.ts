@@ -180,15 +180,36 @@ export async function getWorkspaceBootstrap(): Promise<BootstrapWorkspacesRespon
   }
   const { workspaces } = await getWorkspaces();
   const ids = workspaces.map((w) => w.id);
-  const docsByWorkspace = await getDocumentsForWorkspaces(ids);
+  const [docsByWorkspace, chatsByWorkspace, historyByWorkspace] = await Promise.all([
+    getDocumentsForWorkspaces(ids),
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          return (await import("./chat.api")).getChats(id);
+        } catch {
+          return { chats: [] };
+        }
+      }),
+    ),
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          return await (await import("./history.api")).getHistory({ workspaceId: id });
+        } catch {
+          return { history: [] };
+        }
+      }),
+    ),
+  ]);
   const store: Record<string, WorkspaceData> = {};
-  for (const w of workspaces) {
+  for (let i = 0; i < workspaces.length; i++) {
+    const w = workspaces[i];
     store[w.id] = {
       docs: docsByWorkspace[w.id] ?? [],
       questions: [],
       flashcards: [],
-      chats: [],
-      history: [],
+      chats: chatsByWorkspace[i]?.chats ?? [],
+      history: historyByWorkspace[i]?.history ?? [],
       weakTopics: [],
       audit: [],
     };

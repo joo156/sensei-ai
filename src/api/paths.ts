@@ -47,6 +47,7 @@ export const paths = {
     questions: "/generate/questions",
     testHelp: "/generate/test-help",
     flashcards: "/generate/flashcards",
+    flashcardTopics: "/generate/flashcard-topics",
     studyPlan: "/generate/study-plan",
     revision: "/generate/revision",
   },
@@ -107,4 +108,9 @@ export const paths = {
 
   /** GET /search?q= — consumer-defined (src/api/search.api.ts), see note above. */
   search: "/search",
+
+  /** GET /admin/stats — live site-wide totals (staff only, admin dashboard). */
+  admin: {
+    stats: "/admin/stats",
+  },
 } as const;

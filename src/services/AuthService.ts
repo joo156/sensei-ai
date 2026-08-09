@@ -9,6 +9,7 @@
 import { supabase } from "@/lib/supabase";
 import * as authApi from "@/api/auth.api";
 import { setAccessToken } from "@/api/http";
+import { STORAGE_KEYS } from "@/constants";
 import type { AuthUser, Session } from "@/types/api/auth.contracts";
 
 /** Last known session, kept in memory so restoreSession() stays synchronous. */
@@ -67,7 +68,12 @@ export const AuthService = {
   },
 
   /** Sign in with email + password and cache the resulting session. */
-  async login(email: string, password: string): Promise<Session> {
+  async login(email: string, password: string, remember = true): Promise<Session> {
+    // Flip the remember flag BEFORE the sign-in call so the storage adapter
+    // writes the fresh token to localStorage (remembered) or memory (not).
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEYS.remember, remember ? "1" : "0");
+    }
     const { session } = await authApi.login({ email, password });
     cachedSession = session;
     setAccessToken(session.access_token);

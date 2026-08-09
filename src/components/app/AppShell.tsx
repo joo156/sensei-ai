@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/app/BrandMark";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { motion } from "motion/react";
@@ -12,6 +12,8 @@ import {
   Home,
   LogOut,
   Menu,
+  MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
   Search,
@@ -19,6 +21,7 @@ import {
   ShieldCheck,
   Sparkles,
   SquareTerminal,
+  Trash2,
   User as UserIcon,
   Workflow,
 } from "lucide-react";
@@ -41,9 +44,10 @@ import { GlobalSearch } from "@/components/app/GlobalSearch";
 import { NotificationCenter } from "@/components/app/NotificationCenter";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useAuth, type Role } from "@/contexts/AuthContext";
+import { useAuth, homeForRole, type Role } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { ReviewBadge } from "@/components/app/badges";
+import type { Workspace } from "@/types/domain";
 import sprintsLogo from "@/assets/sprints-logo.png";
 
 type NavItem = {
@@ -117,11 +121,14 @@ function NavSection({
       </p>
       <nav className="flex flex-col gap-0.5">
         {visible.map((item) => {
-          const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+          // "Home" is role-specific: students get /home, reviewers/admins their
+          // own landing page (ROLE_HOME), so the label never dead-ends.
+          const target = item.to === "/home" ? homeForRole(role) : item.to;
+          const active = target === "/" ? pathname === "/" : pathname.startsWith(target);
           return (
             <Link
               key={item.to}
-              to={item.to}
+              to={target}
               onClick={onNavigate}
               className={cn(
                 "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
@@ -225,12 +232,138 @@ function CreateWorkspaceDialog({
   );
 }
 
+function EditWorkspaceDialog({
+  workspace,
+  open,
+  onOpenChange,
+}: {
+  workspace: Workspace;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { updateWorkspace } = useWorkspace();
+  const [name, setName] = useState(workspace.name);
+  const [details, setDetails] = useState(workspace.description ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Re-seed the form when a different workspace is opened for editing.
+  useEffect(() => {
+    setName(workspace.name);
+    setDetails(workspace.description ?? "");
+  }, [workspace.id, workspace.name, workspace.description]);
+
+  const save = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await updateWorkspace(workspace.id, { name: name.trim(), description: details.trim() });
+      onOpenChange(false);
+      toast.success("Workspace updated");
+    } catch {
+      toast.error("Could not update the workspace.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Manage workspace</DialogTitle>
+          <DialogDescription>
+            Rename it or rewrite its short description. Documents, chats and generations are kept.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="manage-name">Workspace name</Label>
+            <Input
+              id="manage-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="manage-details">Short details</Label>
+            <Textarea
+              id="manage-details"
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              className="min-h-20"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={save} disabled={!name.trim() || saving}>
+            <Pencil className="size-4" /> Save changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteWorkspaceDialog({
+  workspace,
+  open,
+  onOpenChange,
+}: {
+  workspace: Workspace;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const { removeWorkspace } = useWorkspace();
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    setRemoving(true);
+    try {
+      await removeWorkspace(workspace.id);
+      onOpenChange(false);
+      toast.success(`${workspace.name} removed`);
+    } catch {
+      toast.error("Could not remove the workspace.");
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove “{workspace.name}”?</DialogTitle>
+          <DialogDescription>
+            This deletes the workspace and its documents, generations and review history. This
+            cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={remove} disabled={removing}>
+            <Trash2 className="size-4" /> Remove workspace
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function WorkspaceSwitcher() {
   const { workspaces, active, setActive, refreshWorkspaces } = useWorkspace();
   const { user } = useAuth();
   const isStudent = (user?.role ?? "student") === "student";
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Workspace | null>(null);
+  const [deleting, setDeleting] = useState<Workspace | null>(null);
 
   if (workspaces.length === 0) {
     return (
@@ -287,45 +420,79 @@ function WorkspaceSwitcher() {
           </div>
           <div className="max-h-72 space-y-0.5 overflow-y-auto">
             {workspaces.map((w) => (
-              <button
+              <div
                 key={w.id}
-                onClick={() => {
-                  setActive(w.id);
-                  setOpen(false);
-                  toast.success(`Switched to ${w.name}`);
-                }}
-                className="hover:bg-muted flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left"
+                className="hover:bg-muted group flex items-center gap-1 rounded-lg p-1 pl-2.5"
               >
-                <span className="bg-muted text-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold">
-                  {w.name.slice(0, 2).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="block truncate text-sm font-medium">{w.name}</span>
-                    {w.id === current.id && <Check className="text-primary size-4 shrink-0" />}
+                <button
+                  onClick={() => {
+                    setActive(w.id);
+                    setOpen(false);
+                    toast.success(`Switched to ${w.name}`);
+                  }}
+                  className="flex min-w-0 flex-1 items-start gap-2.5 py-1.5 text-left"
+                >
+                  <span className="bg-muted text-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold">
+                    {w.name.slice(0, 2).toUpperCase()}
                   </span>
-                  <span
-                    className={cn(
-                      "block truncate text-[11px]",
-                      isStudent ? "text-muted-foreground/60" : "text-muted-foreground",
-                    )}
-                  >
-                    {w.owner.name || w.owner.email || "—"}
-                    {w.owner.email && w.owner.name ? ` · ${w.owner.email}` : ""}
-                  </span>
-                  <span
-                    className={cn(
-                      "mt-1 flex flex-wrap items-center gap-1.5",
-                      isStudent && "opacity-60",
-                    )}
-                  >
-                    <ReviewBadge state={w.reviewStatus} />
-                    <span className="text-muted-foreground text-[10px]">
-                      {w.pendingReview} pending · {w.generations} generations · {w.docs} docs
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="block truncate text-sm font-medium">{w.name}</span>
+                      {w.id === current.id && <Check className="text-primary size-4 shrink-0" />}
+                    </span>
+                    <span
+                      className={cn(
+                        "block truncate text-[11px]",
+                        isStudent ? "text-muted-foreground/60" : "text-muted-foreground",
+                      )}
+                    >
+                      {w.owner.name || w.owner.email || "—"}
+                      {w.owner.email && w.owner.name ? ` · ${w.owner.email}` : ""}
+                    </span>
+                    <span
+                      className={cn(
+                        "mt-1 flex flex-wrap items-center gap-1.5",
+                        isStudent && "opacity-60",
+                      )}
+                    >
+                      <ReviewBadge state={w.reviewStatus} />
+                      <span className="text-muted-foreground text-[10px]">
+                        {w.pendingReview} pending · {w.generations} generations · {w.docs} docs
+                      </span>
                     </span>
                   </span>
-                </span>
-              </button>
+                </button>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      aria-label={`Manage ${w.name}`}
+                      className="text-muted-foreground hover:bg-muted rounded-lg p-1.5 transition-colors"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-48 p-1">
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        setEditing(w);
+                      }}
+                      className="hover:bg-muted flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+                    >
+                      <Pencil className="size-4" /> Rename / details
+                    </button>
+                    <button
+                      onClick={() => {
+                        setOpen(false);
+                        setDeleting(w);
+                      }}
+                      className="text-destructive hover:bg-destructive/10 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm"
+                    >
+                      <Trash2 className="size-4" /> Delete workspace
+                    </button>
+                  </PopoverContent>
+                </Popover>
+              </div>
             ))}
           </div>
           <button
@@ -341,6 +508,20 @@ function WorkspaceSwitcher() {
       </Popover>
 
       <CreateWorkspaceDialog open={creating} onOpenChange={setCreating} />
+      {editing && (
+        <EditWorkspaceDialog
+          workspace={editing}
+          open
+          onOpenChange={(v) => !v && setEditing(null)}
+        />
+      )}
+      {deleting && (
+        <DeleteWorkspaceDialog
+          workspace={deleting}
+          open
+          onOpenChange={(v) => !v && setDeleting(null)}
+        />
+      )}
     </>
   );
 }

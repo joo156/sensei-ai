@@ -10,7 +10,7 @@ export const ROLE_HOME: Record<(typeof ROLES)[number], string> = {
   admin: "/admin",
 };
 
-/** Permissions per role — consumed via useAuth()/usePermissions(), never inline. */
+/** Permissions per role — consumed via useAuth().can(), never inline. */
 export const ROLE_PERMISSIONS = {
   student: ["review:read", "generation:create", "workspace:read", "document:upload"],
   reviewer: [
@@ -46,6 +46,8 @@ export const STORAGE_KEYS = {
   workspaceActive: "cortexa.workspace",
   workspaceState: "cortexa.workspace.state",
   theme: "cortexa.theme",
+  /** "1" = keep me signed in (session persisted to localStorage); "0" = memory only. */
+  remember: "cortexa.remember",
 } as const;
 
 export const GENERATION_KINDS = [

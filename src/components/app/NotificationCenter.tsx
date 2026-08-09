@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Bell, CheckCheck, Download, ShieldAlert, ShieldX, Sparkles, Inbox } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +48,18 @@ export function NotificationCenter() {
     onError: (err: Error) =>
       notify.error("Could not update notifications", { description: err.message }),
   });
+
+  // Realtime: when a notification row the current user may read is inserted,
+  // refetch the feed so new activity appears without a manual refresh.
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = NotificationService.subscribe(() => {
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [user?.id, queryClient]);
 
   const items = data?.notifications ?? [];
   const unread = data?.unread ?? 0;

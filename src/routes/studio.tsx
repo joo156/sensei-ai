@@ -39,9 +39,12 @@ import { useNotify } from "@/contexts/NotificationContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { GenerationService } from "@/services/GenerationService";
 import { ChatService } from "@/services/ChatService";
-import { HistoryService } from "@/services/HistoryService";
+import { HistoryService, type PersistGenerationMeta } from "@/services/HistoryService";
+import { FavoriteService } from "@/services/FavoriteService";
 import type { WsDoc } from "@/types/domain";
+import type { ChatCitation } from "@/types/domain";
 import type { GeneratedQuestion } from "@/types/domain";
+import type { WeakTopic } from "@/types/domain";
 
 export const Route = createFileRoute("/studio")({
   head: () => ({
@@ -198,8 +201,23 @@ function useDocTitle(doc: string) {
 
 function useGenerationLog() {
   const { addHistory } = useWorkspace();
-  return (agent: string, docTitle: string, items: number, quality = 9.2) =>
-    addHistory(HistoryService.buildRow({ agent, doc: docTitle, items, quality }));
+  return (
+    agent: string,
+    docTitle: string,
+    items: number,
+    meta?: PersistGenerationMeta & { quality?: number },
+  ) => {
+    const generationId = meta?.kind ? crypto.randomUUID() : undefined;
+    const row = HistoryService.buildRow({
+      agent,
+      doc: docTitle,
+      items,
+      quality: meta?.quality,
+      generationId,
+    });
+    addHistory(row, meta ? { ...meta, generationId } : undefined);
+    return row;
+  };
 }
 
 /* ---------------- Question Bank ---------------- */
@@ -236,7 +254,13 @@ function QuestionBankPanel({ model, doc }: { model: ModelId; doc: string }) {
     const out = res.data;
     setResults(out);
     setBusy(false);
-    log("Question Bank", docTitle, out.length);
+    log("Question Bank", docTitle, out.length, {
+      kind: "question_bank",
+      model,
+      title: docTitle,
+      payload: { questions: out },
+      documentIds: [doc].filter(Boolean),
+    });
     notify.success(`Generated ${out.length} grounded questions from ${docTitle} with ${model}.`);
   };
 
@@ -314,7 +338,13 @@ function TestHelpPanel({ model, doc }: { model: ModelId; doc: string }) {
     setSet(out);
     setBusy(false);
     setStarted(true);
-    log("Test Help", docTitle, out.length);
+    log("Test Help", docTitle, out.length, {
+      kind: "test_help",
+      model,
+      title: docTitle,
+      payload: { questions: out },
+      documentIds: [doc].filter(Boolean),
+    });
     notify.success(`Exam ready · ${duration} min · ${model}`);
   };
 
@@ -376,11 +406,80 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
   const notify = useNotify();
   const log = useGenerationLog();
   const [topic, setTopic] = useState("All chapters");
+  const [topics, setTopics] = useState<string[]>([]);
+  const [format, setFormat] = useState<"term-definition" | "qa">("term-definition");
   const [count, setCount] = useState(6);
   const [busy, setBusy] = useState(false);
   const [deck, setDeck] = useState<Flashcard[] | null>(null);
+  const [favs, setFavs] = useState<Set<string>>(new Set());
+
+  // Hydrate favorites for the current deck from Supabase (front-keyed),
+  // scoped to the active workspace so favorites don't leak across workspaces.
+  useEffect(() => {
+    if (!deck) return;
+    void FavoriteService.favoritedSet(
+      deck.map((c) => c.front),
+      workspace?.id,
+    ).then((res) => {
+      if (res.success) setFavs(res.data);
+    });
+  }, [deck, workspace?.id]);
+
+  const toggleFavorite = async (card: Flashcard) => {
+    const wasFav = favs.has(card.front);
+    setFavs((s) => {
+      const n = new Set(s);
+      if (wasFav) n.delete(card.front);
+      else n.add(card.front);
+      return n;
+    });
+    const res = await FavoriteService.toggleFavorite({
+      front: card.front,
+      back: card.back,
+      topic: card.topic ?? null,
+      format: card.format ?? null,
+      sourceChunkId: card.citations?.[0]?.chunk ?? null,
+      workspaceId: workspace?.id ?? null,
+    });
+    if (!res.success) {
+      setFavs((s) => {
+        const n = new Set(s);
+        if (wasFav) n.add(card.front);
+        else n.delete(card.front);
+        return n;
+      });
+      notify.fromError(res.error, "Could not update favorite");
+    }
+  };
+
+  // Keep the topic selector in sync with the PDF: topics are extracted from
+  // the indexed document chunks, exactly like the Streamlit UI does. If the
+  // extraction returns nothing we fall back to "All chapters".
+  useEffect(() => {
+    let cancelled = false;
+    if (!workspace || !doc) {
+      setTopics([]);
+      setTopic("All chapters");
+      return;
+    }
+    setTopics([]);
+    setTopic("All chapters");
+    GenerationService.flashcardTopics({
+      workspaceId: workspace.id,
+      documentId: doc,
+      model,
+    }).then((res) => {
+      if (cancelled) return;
+      if (res.success) setTopics(res.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace?.id, doc, model]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!workspace) return null;
+
+  const topicOptions = ["All chapters", ...topics];
 
   const generate = async () => {
     setBusy(true);
@@ -391,6 +490,7 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
       model,
       count,
       topic,
+      format,
     });
     if (!res.success) {
       setBusy(false);
@@ -400,7 +500,13 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
     const cards = res.data;
     setDeck(cards);
     setBusy(false);
-    log("Flashcards", docTitle, cards.length);
+    log("Flashcards", docTitle, cards.length, {
+      kind: "flashcards",
+      model,
+      title: docTitle,
+      payload: { flashcards: cards },
+      documentIds: [doc].filter(Boolean),
+    });
     notify.success(`${cards.length} flashcards generated from ${docTitle} with ${model}.`);
   };
 
@@ -408,11 +514,13 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Flashcards controls" onGenerate={generate} busy={busy}>
         <SegmentedField
-          label="Topic"
-          value={topic}
-          onChange={setTopic}
-          options={["All chapters", "Data types", "Functions", "OOP"]}
+          label="Card format"
+          value={format}
+          onChange={(v) => setFormat(v as "term-definition" | "qa")}
+          options={["term-definition", "qa"]}
+          labels={{ "term-definition": "Term · Definition", qa: "Question and Answer" }}
         />
+        <SegmentedField label="Topic" value={topic} onChange={setTopic} options={topicOptions} />
         <SliderField
           label="Card count"
           value={count}
@@ -435,7 +543,7 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
         )}
         {!busy && deck && (
           <div className="surface-card p-6">
-            <FlashcardDeck cards={deck} />
+            <FlashcardDeck cards={deck} favorites={favs} onToggleFavorite={toggleFavorite} />
           </div>
         )}
       </div>
@@ -474,14 +582,20 @@ function StudyPlanPanel({ model, doc }: { model: ModelId; doc: string }) {
     const out = res.data;
     setPlan(out);
     setBusy(false);
-    log("Study Plan", docTitle, days);
+    log("Study Plan", docTitle, days, {
+      kind: "study_plan",
+      model,
+      title: docTitle,
+      payload: { days: out },
+      documentIds: [doc].filter(Boolean),
+    });
     notify.success(`${days}-day study plan generated with ${model}.`);
   };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
       <ControlsCard title="Study plan controls" onGenerate={generate} busy={busy}>
-        <SliderField label="Days" value={days} onChange={setDays} min={3} max={14} step={1} />
+        <SliderField label="Days" value={days} onChange={setDays} min={1} max={14} step={1} />
         <SliderField
           label="Hours per day"
           value={hoursPerDay}
@@ -540,9 +654,7 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
   const notify = useNotify();
   const log = useGenerationLog();
   const [busy, setBusy] = useState(false);
-  const [items, setItems] = useState<{ topic: string; strength: number; action: string }[] | null>(
-    null,
-  );
+  const [items, setItems] = useState<WeakTopic[] | null>(null);
 
   if (!workspace) return null;
 
@@ -561,7 +673,13 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
     const out = res.data;
     setItems(out);
     setBusy(false);
-    log("Revision", docTitle, out.length);
+    log("Revision", docTitle, out.length, {
+      kind: "revision_sheet",
+      model,
+      title: docTitle,
+      payload: { weakTopics: out },
+      documentIds: [doc].filter(Boolean),
+    });
     notify.success(`Weak topics analysed with ${model}.`);
   };
 
@@ -597,32 +715,55 @@ function RevisionPanel({ model, doc }: { model: ModelId; doc: string }) {
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.05 }}
-                className="surface-card flex flex-wrap items-center gap-4 p-4"
+                className="surface-card p-4"
               >
-                <Brain className="text-primary size-5" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{it.topic}</p>
-                  <p className="text-muted-foreground text-xs">{it.action}</p>
-                </div>
-                <div className="w-28">
-                  <div className="bg-muted h-1.5 overflow-hidden rounded-full">
-                    <div
-                      className={cn(
-                        "h-full",
-                        it.strength < 50
-                          ? "bg-destructive"
-                          : it.strength < 70
-                            ? "bg-warning"
-                            : "bg-success",
+                <div className="flex flex-wrap items-center gap-4">
+                  <Brain className="text-primary size-5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">{it.topic}</p>
+                      {it.difficulty && (
+                        <span className="border-border bg-muted/40 text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize">
+                          {it.difficulty}
+                        </span>
                       )}
-                      style={{ width: `${it.strength}%` }}
-                    />
+                      {it.nextRevisionDate && (
+                        <span className="text-muted-foreground text-[11px]">
+                          Review by {it.nextRevisionDate}
+                        </span>
+                      )}
+                    </div>
+                    {it.description && (
+                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                        {it.description}
+                      </p>
+                    )}
+                    {it.confidencePrompt && (
+                      <p className="border-primary/30 bg-primary/5 mt-2 rounded-lg border-l-2 pl-2 text-xs italic">
+                        Self-check: {it.confidencePrompt}
+                      </p>
+                    )}
                   </div>
-                  <p className="text-muted-foreground mt-1 text-right text-[11px]">
-                    {it.strength}%
-                  </p>
+                  <div className="w-28">
+                    <div className="bg-muted h-1.5 overflow-hidden rounded-full">
+                      <div
+                        className={cn(
+                          "h-full",
+                          it.strength < 50
+                            ? "bg-destructive"
+                            : it.strength < 70
+                              ? "bg-warning"
+                              : "bg-success",
+                        )}
+                        style={{ width: `${it.strength}%` }}
+                      />
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-right text-[11px]">
+                      {it.strength}% retained
+                    </p>
+                  </div>
+                  <CheckCircle2 className="text-muted-foreground hidden size-4 sm:block" />
                 </div>
-                <CheckCircle2 className="text-muted-foreground size-4" />
               </motion.div>
             ))}
           </div>
@@ -679,7 +820,18 @@ function ChatPanel({
     let id = chatId;
 
     if (!id) {
-      id = ChatService.createChatId();
+      const created = await ChatService.createChat({
+        workspaceId: workspace.id,
+        kind: agent.id === "concept" ? "concept" : "mentor",
+        title: q.slice(0, 48),
+        model,
+      });
+      if (!created.success) {
+        setBusy(false);
+        notify.fromError(created.error, "Could not start chat");
+        return;
+      }
+      id = created.data.chatId;
       addChat({
         id,
         title: q.slice(0, 48),
@@ -738,7 +890,10 @@ function ChatPanel({
             </div>
           ) : (
             <div key={i} className="surface-card max-w-[85%] p-3 text-sm">
-              {m.text}
+              <div className="whitespace-pre-wrap">{m.text}</div>
+              {m.citations && m.citations.length > 0 && (
+                <MessageReferences citations={m.citations} />
+              )}
             </div>
           ),
         )}
@@ -773,6 +928,38 @@ function ChatPanel({
 
 /* ---------------- Shared UI ---------------- */
 
+function MessageReferences({ citations }: { citations: ChatCitation[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "border-border text-muted-foreground inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors hover:border-primary/40 hover:text-primary",
+          open && "border-primary/40 text-primary",
+        )}
+      >
+        <BookOpen className="size-3.5" />
+        {open ? "Hide references" : `Show references (${citations.length})`}
+      </button>
+      {open && (
+        <div className="border-border mt-2 space-y-2 border-l-2 pl-3">
+          {citations.map((c, i) => (
+            <div key={`${c.docId}-${i}`} className="text-xs leading-relaxed">
+              <p className="text-primary font-semibold">
+                {c.docTitle}
+                {c.page ? ` · p.${c.page}` : ""}
+              </p>
+              <p className="text-muted-foreground line-clamp-3">{c.snippet}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ControlsCard({
   title,
   children,
@@ -805,11 +992,13 @@ function SegmentedField({
   value,
   onChange,
   options,
+  labels,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  labels?: Record<string, string>;
 }) {
   return (
     <div>
@@ -827,7 +1016,7 @@ function SegmentedField({
                 : "border-border text-muted-foreground hover:border-primary/40",
             )}
           >
-            {o}
+            {labels?.[o] ?? o}
           </button>
         ))}
       </div>

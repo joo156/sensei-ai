@@ -25,6 +25,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as ChatChatIdRouteImport } from './routes/chat.$chatId'
+import { Route as ReopenGenerationIdRouteImport } from './routes/reopen.$generationId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -106,6 +107,11 @@ const ChatChatIdRoute = ChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReopenGenerationIdRoute = ReopenGenerationIdRouteImport.update({
+  id: '/reopen/$generationId',
+  path: '/reopen/$generationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/studio': typeof StudioRoute
   '/workspace': typeof WorkspaceRoute
   '/chat/$chatId': typeof ChatChatIdRoute
+  '/reopen/$generationId': typeof ReopenGenerationIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/studio': typeof StudioRoute
   '/workspace': typeof WorkspaceRoute
   '/chat/$chatId': typeof ChatChatIdRoute
+  '/reopen/$generationId': typeof ReopenGenerationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/studio': typeof StudioRoute
   '/workspace': typeof WorkspaceRoute
   '/chat/$chatId': typeof ChatChatIdRoute
+  '/reopen/$generationId': typeof ReopenGenerationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/workspace'
     | '/chat/$chatId'
+    | '/reopen/$generationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -199,6 +209,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/workspace'
     | '/chat/$chatId'
+    | '/reopen/$generationId'
   id:
     | '__root__'
     | '/'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/workspace'
     | '/chat/$chatId'
+    | '/reopen/$generationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -236,6 +248,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRoute
   WorkspaceRoute: typeof WorkspaceRoute
   ChatChatIdRoute: typeof ChatChatIdRoute
+  ReopenGenerationIdRoute: typeof ReopenGenerationIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -352,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatChatIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reopen/$generationId': {
+      id: '/reopen/$generationId'
+      path: '/reopen/$generationId'
+      fullPath: '/reopen/$generationId'
+      preLoaderRoute: typeof ReopenGenerationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -372,6 +392,7 @@ const rootRouteChildren: RootRouteChildren = {
   StudioRoute: StudioRoute,
   WorkspaceRoute: WorkspaceRoute,
   ChatChatIdRoute: ChatChatIdRoute,
+  ReopenGenerationIdRoute: ReopenGenerationIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

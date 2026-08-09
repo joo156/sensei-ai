@@ -26,12 +26,22 @@ export interface GenerateQuestionsResponse {
 
 export interface GenerateFlashcardsRequest extends GenerationBaseRequest {
   count?: number;
+  /** "term-definition" (front = term) or "qa" (front = question). */
+  cardFormat?: "term-definition" | "qa";
+  /** Real topic from the PDF; "All chapters" (default) means the whole doc. */
+  topic?: string;
 }
 
 export interface GenerateFlashcardsResponse {
   generationId: string;
   kind: Extract<GenerationKind, "flashcards">;
   flashcards: WsFlashcard[];
+}
+
+export type FlashcardTopicsRequest = GenerationBaseRequest;
+
+export interface FlashcardTopicsResponse {
+  topics: string[];
 }
 
 export interface GenerateStudyPlanRequest extends GenerationBaseRequest {

@@ -16,8 +16,8 @@
 --     view keeps reading profiles/auth.users as its owner, so NO new grants
 --     on base tables or auth.users are needed.
 --   * The same predicate is ALSO expressed as RLS policies on `workspaces`
---     (defense in depth for direct table access, matching
---     docs/SUPABASE_INTEGRATION.md §5).
+--     (defense in depth for direct table access, matching the workspace
+--     visibility model).
 --   * `has_role()` / `has_full_access()` are SECURITY DEFINER helpers so
 --     policies and the view can read `user_roles` without RLS recursion.
 --
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.user_roles (
 -- existing definition.
 -- ---------------------------------------------------------------------------
 
--- Documented at docs/SUPABASE_INTEGRATION.md:30. SECURITY DEFINER so policies
+-- SECURITY DEFINER so policies
 -- and the security-definer view can read user_roles without RLS recursion.
 DO $$
 BEGIN

@@ -114,11 +114,20 @@ export interface WsDoc {
   sizeBytes?: number;
 }
 
+export interface ChatCitation {
+  docId: string;
+  docTitle: string;
+  page?: number;
+  snippet: string;
+}
+
 export interface WsChatMessage {
   id: string;
   role: "user" | "assistant";
   text: string;
   time: string;
+  /** Chunks the assistant reply was grounded on (present on chat replies). */
+  citations?: ChatCitation[];
 }
 
 export interface WsChat {
@@ -140,11 +149,21 @@ export interface WsHistoryRow {
   review: ReviewState;
   items: number;
   chatId?: string;
+  /** Supabase generations row this run is persisted under (for reopen). */
+  generationId?: string;
 }
 
 export interface WsFlashcard {
   front: string;
   back: string;
+  tag?: string;
+  /** "term-definition" or "qa". */
+  format?: string;
+  /** Real content topic the card drills (from the PDF's topic allow-list). */
+  topic?: string;
+  /** Ingestion chunk id the card cites, when the model produced one. */
+  sourceChunkId?: string;
+  citations?: Citation[];
 }
 
 export type AuditAction = "Approved" | "Rejected" | "Needs Edit" | "Flagged" | "Comment";
@@ -163,6 +182,14 @@ export interface WeakTopic {
   topic: string;
   strength: number;
   action: string;
+  /** One-line summary of what to revisit for this topic. */
+  description?: string;
+  /** Per-topic difficulty: easy / medium / hard. */
+  difficulty?: string;
+  /** Suggested review-by date (ISO). */
+  nextRevisionDate?: string;
+  /** Optional self-check prompt for this topic. */
+  confidencePrompt?: string;
 }
 
 export interface WorkspaceData {

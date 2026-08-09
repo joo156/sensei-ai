@@ -17,6 +17,8 @@ Canonical TypeScript shapes live in `src/types/database.types.ts`.
 - **chats** — `id`, `workspace_id`, `user_id`, `kind('mentor'|'concept')`, `title`, `model`, `created_at`.
 - **chat_messages** — `id`, `chat_id (FK chats)`, `role('user'|'assistant'|'system')`, `content`, `citations jsonb`, `created_at`.
 - **notifications** — `id`, `user_id`, `workspace_id`, `roles app_role[]`, `kind`, `title`, `body`, `read`, `created_at`.
+- **flashcard_favorites** — `id`, `user_id (FK profiles)`, `generation_id (FK generations, nullable)`, `front`, `back`, `topic`, `format`, `source_chunk_id`, `created_at`, unique `(user_id, front)` (per-user saved flashcards).
+- **pipeline_telemetry** — singleton row (`id = 1`): `avg_retrieval_ms`, `top_k`, `embedding_model`, `validation_pass_rate`, `support_checked_pct`, `updated_at` (RAG pipeline health rollups).
 - **history** — `id`, `workspace_id`, `user_id`, `generation_id`, `kind`, `title`, `model`, `review_status`, `created_at`.
 - **analytics** — `workspace_id`, `captured_at`, `documents`, `generations`, `approvals`, `rejections`, `avg_grounding`, `avg_quality` (materialised or rolled up nightly).
 
