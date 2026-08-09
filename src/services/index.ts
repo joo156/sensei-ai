@@ -7,6 +7,7 @@ export { ChatService } from "./ChatService";
 export { ReviewService } from "./ReviewService";
 export { HistoryService } from "./HistoryService";
 export { AnalyticsService } from "./AnalyticsService";
+export { AdminService } from "./AdminService";
 export { AgentService } from "./AgentService";
 export { ContentService } from "./ContentService";
 export { NotificationService } from "./NotificationService";

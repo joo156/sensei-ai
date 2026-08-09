@@ -91,48 +91,48 @@ function Analytics() {
             isEmpty={(d) => d.activitySeries.length === 0 && d.topicCoverage.length === 0}
             onRetry={() => void refetch()}
           >
-            {({ activitySeries, bloomDistribution, topicCoverage, typeDistribution }) => (
+            {({ activitySeries, bloomDistribution, topicCoverage, typeDistribution, summary }) => (
               <>
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   <StatCard
                     label="Questions generated"
-                    value="480"
-                    delta="+91 this week"
+                    value={String(summary.questions)}
+                    delta="Across all workspaces"
                     icon={ListChecks}
                     index={0}
                   />
                   <StatCard
                     label="Flashcards created"
-                    value="666"
-                    delta="+148 this week"
+                    value={String(summary.flashcards)}
+                    delta="Across all workspaces"
                     icon={Layers}
                     index={1}
                   />
                   <StatCard
                     label="Study plans"
-                    value="18"
-                    delta="4 active this month"
+                    value={String(summary.studyPlans)}
+                    delta="Generated plans"
                     icon={BookOpen}
                     index={2}
                   />
                   <StatCard
                     label="Grounding success"
-                    value="98.4%"
-                    delta="Target 98%"
+                    value={summary.grounding != null ? `${summary.grounding}%` : "—"}
+                    delta="Mean citation coverage"
                     icon={ShieldCheck}
                     index={3}
                   />
                   <StatCard
                     label="Average quality"
-                    value="9.3 / 10"
-                    delta="Across 1.2k outputs"
+                    value={summary.quality != null ? `${summary.quality} / 10` : "—"}
+                    delta="Mean review score"
                     icon={Gauge}
                     index={4}
                   />
                   <StatCard
                     label="Review completion"
-                    value="86%"
-                    delta="14% awaiting a reviewer"
+                    value={summary.reviewCompletion != null ? `${summary.reviewCompletion}%` : "—"}
+                    delta="Of all reviewable runs"
                     icon={Timer}
                     index={5}
                   />

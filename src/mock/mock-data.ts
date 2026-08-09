@@ -9,6 +9,7 @@ import type {
   PipelineStep,
   WsFlashcard,
 } from "@/types/domain";
+import type { AnalyticsSummary } from "@/types/api/analytics.contracts";
 
 export const documents: DocItem[] = [
   {
@@ -217,6 +218,16 @@ export const topicCoverage: TopicCoverage[] = [
   { topic: "Classes", covered: false, pct: 38 },
   { topic: "Files", covered: false, pct: 24 },
 ];
+
+/** Demo figures for the analytics stat cards (mock mode only). */
+export const analyticsSummary: AnalyticsSummary = {
+  questions: 480,
+  flashcards: 666,
+  studyPlans: 18,
+  grounding: 98.4,
+  quality: 9.3,
+  reviewCompletion: 86,
+};
 
 export const history: HistoryItem[] = [
   {

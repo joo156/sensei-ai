@@ -45,6 +45,10 @@ interface WorkspaceCtx {
   active: Workspace | null;
   setActive: (id: string) => void;
   addWorkspace: (input: { name: string; description: string }) => Promise<Workspace>;
+  /** Rename / re-describe a workspace. */
+  updateWorkspace: (id: string, patch: { name?: string; description?: string }) => Promise<void>;
+  /** Remove a workspace (owner + admin) and its local data. */
+  removeWorkspace: (id: string) => Promise<void>;
   /** Refetch the workspace list from the server. */
   refreshWorkspaces: () => void;
   /** Data scoped to the active workspace — switching swaps everything. */
@@ -171,14 +175,18 @@ function WorkspaceStore({
       if (parsed) {
         if (parsed.store) {
           // The generation run log is not persisted locally anymore (Phase 8):
-          // strip any stale `history` from older localStorage snapshots so the
-          // Supabase-backed log from the bootstrap is authoritative.
-          const cleaned = Object.fromEntries(
-            Object.entries(parsed.store)
-              .filter(([id]) => ids.has(id))
-              .map(([id, d]) => [id, { ...d, history: [] }]),
-          );
-          setStore(cleaned);
+          // restore only the draft fields (notes, chats, audit, review state)
+          // from the local snapshot and KEEP the Supabase-backed run log that
+          // the bootstrap just fetched. Overwriting the whole store would wipe
+          // history on every reload.
+          const next: Record<string, WorkspaceData> = {};
+          for (const id of ids) {
+            const seed = seedStore[id];
+            if (!seed) continue;
+            const local = parsed.store[id];
+            next[id] = local ? { ...local, history: seed.history } : seed;
+          }
+          setStore(next);
         }
         if (parsed.activeId && ids.has(parsed.activeId)) setActiveId(parsed.activeId);
       } else {
@@ -189,7 +197,7 @@ function WorkspaceStore({
       /* ignore */
     }
     hydrated.current = true;
-  }, [seedWorkspaces]);
+  }, [seedWorkspaces, seedStore]);
 
   // The server list is authoritative: whenever the bootstrap query refreshes
   // (window focus, reconnect, or invalidation after a mutation), propagate it
@@ -257,6 +265,25 @@ function WorkspaceStore({
         setActiveId(workspace.id);
         void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
         return workspace;
+      },
+      updateWorkspace: async (id, patch) => {
+        const result = await WorkspaceService.updateWorkspace({ id, patch });
+        if (!result.success) throw new Error(result.error.message);
+        setWorkspaces((prev) => prev.map((w) => (w.id === id ? { ...w, ...patch } : w)));
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
+      },
+      removeWorkspace: async (id) => {
+        const result = await WorkspaceService.removeWorkspace(id);
+        if (!result.success) throw new Error(result.error.message);
+        const remaining = workspaces.filter((w) => w.id !== id);
+        setWorkspaces(remaining);
+        setStore((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        if (activeId === id) setActiveId(remaining[0]?.id ?? null);
+        void queryClient.invalidateQueries({ queryKey: ["workspace-bootstrap"] });
       },
       data,
       addDoc: async (doc) => {
@@ -344,7 +371,7 @@ function WorkspaceStore({
         }
       },
     };
-  }, [activeId, queryClient, setActive, store, mutate, workspaces]);
+  }, [activeId, queryClient, setActive, store, mutate, workspaces, setStore, setWorkspaces, setActiveId]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

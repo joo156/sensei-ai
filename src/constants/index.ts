@@ -46,6 +46,8 @@ export const STORAGE_KEYS = {
   workspaceActive: "cortexa.workspace",
   workspaceState: "cortexa.workspace.state",
   theme: "cortexa.theme",
+  /** "1" = keep me signed in (session persisted to localStorage); "0" = memory only. */
+  remember: "cortexa.remember",
 } as const;
 
 export const GENERATION_KINDS = [

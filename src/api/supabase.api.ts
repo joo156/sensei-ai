@@ -21,7 +21,9 @@ import { supabase } from "@/lib/supabase";
 import { logger } from "@/lib/logger";
 import type {
   DbGeneration,
+  DbGenerationWithCreator,
   DbNotification,
+  DbPipelineStats,
   DbReview,
   DbWorkspaceWithOwner,
   FlashcardFavorite,
@@ -160,6 +162,25 @@ export async function listAllGenerations(
   return (data ?? []) as DbGeneration[];
 }
 
+/**
+ * Generations with creator + workspace provenance, filtered to the caller's
+ * visibility (staff: every row; owner: their own) by the security-definer view.
+ */
+export async function listGenerationsWithCreator(
+  workspaceId?: string,
+  kinds: GenerationKind[] = REVIEWABLE_KINDS,
+): Promise<DbGenerationWithCreator[]> {
+  let query = supabase
+    .from("generation_with_creator")
+    .select("*")
+    .in("kind", kinds)
+    .order("created_at", { ascending: false });
+  if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return (data ?? []) as DbGenerationWithCreator[];
+}
+
 export async function listGenerationsForWorkspaces(
   workspaceIds: string[],
 ): Promise<DbGeneration[]> {
@@ -283,11 +304,13 @@ export function subscribeNotifications(onChange: () => void): () => void {
  * Flashcard favorites
  * ------------------------------------------------------------------------- */
 
-export async function listFlashcardFavorites(): Promise<FlashcardFavorite[]> {
-  const { data, error } = await supabase
+export async function listFlashcardFavorites(workspaceId?: string): Promise<FlashcardFavorite[]> {
+  let query = supabase
     .from("flashcard_favorites")
     .select("*")
     .order("created_at", { ascending: false });
+  if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  const { data, error } = await query;
   if (error) throw error;
   return (data ?? []) as FlashcardFavorite[];
 }
@@ -295,6 +318,7 @@ export async function listFlashcardFavorites(): Promise<FlashcardFavorite[]> {
 export async function addFlashcardFavorite(input: {
   user_id: string;
   generation_id: string | null;
+  workspace_id: string | null;
   front: string;
   back: string | null;
   topic: string | null;
@@ -314,4 +338,14 @@ export async function removeFlashcardFavorite(userId: string, front: string): Pr
     .eq("user_id", userId)
     .eq("front", front);
   if (error) throw error;
+}
+
+/* ---------------------------------------------------------------------------
+ * Pipeline telemetry (migration 019 — staff-gated pipeline_stats view)
+ * ------------------------------------------------------------------------- */
+
+export async function getPipelineStats(): Promise<DbPipelineStats | null> {
+  const { data, error } = await supabase.from("pipeline_stats").select("*").limit(1).maybeSingle();
+  if (error) throw error;
+  return (data ?? null) as DbPipelineStats | null;
 }

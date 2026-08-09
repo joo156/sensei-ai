@@ -110,6 +110,13 @@ export interface DbGeneration {
   created_at: string;
 }
 
+/** `generation_with_creator` view: generation rows + provenance columns. */
+export interface DbGenerationWithCreator extends DbGeneration {
+  creator_name: string | null;
+  creator_email: string | null;
+  workspace_name: string | null;
+}
+
 export interface DbGenerationVersion {
   id: string;
   generation_id: string;
@@ -189,12 +196,24 @@ export interface FlashcardFavorite {
   id: string;
   user_id: string;
   generation_id: string | null;
+  workspace_id: string | null;
   front: string;
   back: string | null;
   topic: string | null;
   format: string | null;
   source_chunk_id: string | null;
   created_at: string;
+}
+
+/** `pipeline_stats` view row — live chunks count plus config/measured telemetry (staff-gated). */
+export interface DbPipelineStats {
+  chunks_indexed: number;
+  avg_retrieval_ms: number | null;
+  top_k: number | null;
+  embedding_model: string | null;
+  validation_pass_rate: number | null;
+  support_checked_pct: number | null;
+  updated_at: string | null;
 }
 
 /** Convenience map mirroring the Supabase generated `Database` shape. */
@@ -216,9 +235,11 @@ export interface Database {
       history: { Row: DbHistoryEntry };
       analytics: { Row: DbAnalyticsSnapshot };
       flashcard_favorites: { Row: FlashcardFavorite };
+      pipeline_telemetry: { Row: DbPipelineStats };
     };
     Views: {
       workspace_with_owner: { Row: DbWorkspaceWithOwner };
+      pipeline_stats: { Row: DbPipelineStats };
     };
   };
 }

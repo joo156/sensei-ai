@@ -34,9 +34,10 @@ export interface AuthContextValue {
   signIn: (
     email: string,
     password: string,
+    remember?: boolean,
   ) => Promise<{ ok: true; user: User } | { ok: false; error: string }>;
   /** Alias matching the provider contract. */
-  login: (email: string, password: string) => Promise<User>;
+  login: (email: string, password: string, remember?: boolean) => Promise<User>;
   signOut: () => void;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -52,8 +53,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setSession(AuthService.restoreSession());
-    setReady(true);
+    // The persisted session is rehydrated asynchronously (reads localStorage,
+    // then merges the profile + role rows from Supabase). `ready` must NOT flip
+    // until that has resolved, otherwise a returning user is briefly shown the
+    // signed-out state and, because nothing re-reads the session afterwards,
+    // effectively logs out on every page refresh.
+    let cancelled = false;
+    void AuthService.hydrateSession().then((s) => {
+      if (cancelled) return;
+      setSession(s);
+      setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const user = session?.user ?? null;
@@ -79,8 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      const next = await AuthService.login(email, password);
+    async (email: string, password: string, remember?: boolean) => {
+      const next = await AuthService.login(email, password, remember);
       setSession(next);
       clearOtherUsersWorkspaces(next.user.id);
       return next.user;
@@ -89,9 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signIn = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, remember?: boolean) => {
       try {
-        const u = await login(email, password);
+        const u = await login(email, password, remember);
         return { ok: true as const, user: u };
       } catch (e) {
         return {

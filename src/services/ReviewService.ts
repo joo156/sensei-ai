@@ -7,6 +7,7 @@ import type { WsAuditEntry } from "@/types/domain";
 import { ROLE_PERMISSIONS, type Permission } from "@/constants";
 import type {
   DbGeneration,
+  DbGenerationWithCreator,
   DbReview,
   GenerationKind,
   ReviewStatus,
@@ -86,18 +87,22 @@ export const ReviewService = {
   /**
    * Load the review queue: one workspace (owner path) or every workspace the
    * caller may see (staff path, when `workspaceId` is empty). RLS scopes the
-   * staff reads to rows the caller can actually see.
+   * staff reads to rows the caller can actually see. Rows carry creator +
+   * workspace provenance via `generation_with_creator`.
    */
   async hydrateQueue(workspaceId?: string): Promise<{
-    generations: DbGeneration[];
+    generations: DbGenerationWithCreator[];
     reviews: DbReview[];
   }> {
     const [generations, reviews] = workspaceId
       ? await Promise.all([
-          supabaseApi.listWorkspaceGenerations(workspaceId),
+          supabaseApi.listGenerationsWithCreator(workspaceId),
           supabaseApi.listReviewsForWorkspace(workspaceId),
         ])
-      : await Promise.all([supabaseApi.listAllGenerations(), supabaseApi.listAllReviews()]);
+      : await Promise.all([
+          supabaseApi.listGenerationsWithCreator(),
+          supabaseApi.listAllReviews(),
+        ]);
     return { generations, reviews };
   },
 

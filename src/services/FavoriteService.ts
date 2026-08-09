@@ -7,17 +7,23 @@ import type { Result } from "@/types/api/common";
 import type { FlashcardFavorite } from "@/types/database.types";
 
 export const FavoriteService = {
-  /** All flashcards the signed-in user has favorited (real mode). */
-  async list(): Promise<Result<FlashcardFavorite[]>> {
+  /**
+   * All flashcards the signed-in user has favorited in a workspace (real
+   * mode). When `workspaceId` is omitted every favorite is returned, which is
+   * what the staff pages need.
+   */
+  async list(workspaceId?: string): Promise<Result<FlashcardFavorite[]>> {
     return attempt("FavoriteService.list", async () => {
       if (isMockMode()) return [];
-      return supabaseApi.listFlashcardFavorites();
+      return supabaseApi.listFlashcardFavorites(workspaceId);
     });
   },
 
   /**
    * Toggle a favorite. The row is keyed by `user_id + front` (unique), so
-   * favoriting the same card twice flips it off. Returns the new state.
+   * favoriting the same card twice flips it off. The favorite is bound to the
+   * workspace it was created in, so the home screen only shows it inside that
+   * workspace. Returns the new state.
    */
   async toggleFavorite(input: {
     front: string;
@@ -26,6 +32,7 @@ export const FavoriteService = {
     format?: string | null;
     sourceChunkId?: string | null;
     generationId?: string | null;
+    workspaceId?: string | null;
   }): Promise<Result<boolean>> {
     return attempt("FavoriteService.toggleFavorite", async () => {
       if (isMockMode()) {
@@ -36,7 +43,7 @@ export const FavoriteService = {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("You must be signed in to save favorites");
-      const existing = await supabaseApi.listFlashcardFavorites();
+      const existing = await supabaseApi.listFlashcardFavorites(input.workspaceId ?? undefined);
       const row = existing.find((f) => f.user_id === user.id && f.front === input.front);
       if (row) {
         await supabaseApi.removeFlashcardFavorite(user.id, input.front);
@@ -45,6 +52,7 @@ export const FavoriteService = {
       await supabaseApi.addFlashcardFavorite({
         user_id: user.id,
         generation_id: input.generationId ?? null,
+        workspace_id: input.workspaceId ?? null,
         front: input.front,
         back: input.back ?? null,
         topic: input.topic ?? null,
@@ -55,11 +63,11 @@ export const FavoriteService = {
     });
   },
 
-  /** Favorite states for a set of cards (real mode). */
-  async favoritedSet(fronts: string[]): Promise<Result<Set<string>>> {
+  /** Favorite states for a set of cards, scoped to one workspace (real mode). */
+  async favoritedSet(fronts: string[], workspaceId?: string): Promise<Result<Set<string>>> {
     return attempt("FavoriteService.favoritedSet", async () => {
       if (isMockMode() || fronts.length === 0) return new Set<string>();
-      const rows = await supabaseApi.listFlashcardFavorites();
+      const rows = await supabaseApi.listFlashcardFavorites(workspaceId);
       const wanted = new Set(fronts);
       return new Set(rows.filter((r) => wanted.has(r.front)).map((r) => r.front));
     });

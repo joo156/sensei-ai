@@ -413,13 +413,17 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
   const [deck, setDeck] = useState<Flashcard[] | null>(null);
   const [favs, setFavs] = useState<Set<string>>(new Set());
 
-  // Hydrate favorites for the current deck from Supabase (front-keyed).
+  // Hydrate favorites for the current deck from Supabase (front-keyed),
+  // scoped to the active workspace so favorites don't leak across workspaces.
   useEffect(() => {
     if (!deck) return;
-    void FavoriteService.favoritedSet(deck.map((c) => c.front)).then((res) => {
+    void FavoriteService.favoritedSet(
+      deck.map((c) => c.front),
+      workspace?.id,
+    ).then((res) => {
       if (res.success) setFavs(res.data);
     });
-  }, [deck]);
+  }, [deck, workspace?.id]);
 
   const toggleFavorite = async (card: Flashcard) => {
     const wasFav = favs.has(card.front);
@@ -435,6 +439,7 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
       topic: card.topic ?? null,
       format: card.format ?? null,
       sourceChunkId: card.citations?.[0]?.chunk ?? null,
+      workspaceId: workspace?.id ?? null,
     });
     if (!res.success) {
       setFavs((s) => {
@@ -513,6 +518,7 @@ function FlashcardsPanel({ model, doc }: { model: ModelId; doc: string }) {
           value={format}
           onChange={(v) => setFormat(v as "term-definition" | "qa")}
           options={["term-definition", "qa"]}
+          labels={{ "term-definition": "Term · Definition", qa: "Question and Answer" }}
         />
         <SegmentedField label="Topic" value={topic} onChange={setTopic} options={topicOptions} />
         <SliderField
@@ -986,11 +992,13 @@ function SegmentedField({
   value,
   onChange,
   options,
+  labels,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  labels?: Record<string, string>;
 }) {
   return (
     <div>
@@ -1008,7 +1016,7 @@ function SegmentedField({
                 : "border-border text-muted-foreground hover:border-primary/40",
             )}
           >
-            {o}
+            {labels?.[o] ?? o}
           </button>
         ))}
       </div>

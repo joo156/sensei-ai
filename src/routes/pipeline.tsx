@@ -3,6 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/app/AppShell";
 import { Pipeline } from "@/components/app/Pipeline";
 import { motion } from "motion/react";
+import { useServiceQuery } from "@/hooks/useServiceQuery";
+import { AdminService } from "@/services";
 
 export const Route = createFileRoute("/pipeline")({
   head: () => ({
@@ -27,16 +29,28 @@ export const Route = createFileRoute("/pipeline")({
   ),
 });
 
-const telemetry = [
-  { label: "Chunks indexed", value: "990" },
-  { label: "Avg. retrieval latency", value: "184 ms" },
-  { label: "Top-k", value: "8 (hybrid)" },
-  { label: "Embedding model", value: "gemini-embedding-001" },
-  { label: "Validation pass rate", value: "97.2%" },
-  { label: "Support checked", value: "100%" },
-];
-
 function PipelinePage() {
+  const telemetry = useServiceQuery(["pipeline-telemetry"], () => AdminService.pipelineStats());
+  const stats = telemetry.data;
+
+  const cards = [
+    { label: "Chunks indexed", value: stats ? String(stats.chunksIndexed) : "—" },
+    {
+      label: "Avg. retrieval latency",
+      value: stats?.avgRetrievalMs != null ? `${stats.avgRetrievalMs} ms` : "—",
+    },
+    { label: "Top-k", value: stats?.topK != null ? `${stats.topK} (hybrid)` : "—" },
+    { label: "Embedding model", value: stats?.embeddingModel ?? "—" },
+    {
+      label: "Validation pass rate",
+      value: stats?.validationPassRate != null ? `${stats.validationPassRate}%` : "—",
+    },
+    {
+      label: "Support checked",
+      value: stats?.supportCheckedPct != null ? `${stats.supportCheckedPct}%` : "—",
+    },
+  ];
+
   return (
     <AppShell
       title="RAG Pipeline"
@@ -44,8 +58,16 @@ function PipelinePage() {
     >
       <Pipeline />
 
+      {telemetry.error && (
+        <div className="border-warning/15 bg-warning/5 text-warning mt-6 rounded-xl border p-4 text-sm">
+          Live telemetry is unavailable. Run migration{" "}
+          <code className="text-foreground">019_pipeline_telemetry.sql</code> in the Supabase SQL
+          editor to enable it. {telemetry.error.message}
+        </div>
+      )}
+
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {telemetry.map((t, i) => (
+        {cards.map((t, i) => (
           <motion.div
             key={t.label}
             initial={{ opacity: 0, y: 12 }}

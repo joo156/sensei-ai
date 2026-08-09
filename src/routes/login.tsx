@@ -5,6 +5,7 @@ import { ArrowLeft, LogIn, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DEMO_ACCOUNTS, homeForRole, useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/app/BrandMark";
@@ -32,6 +33,7 @@ function LoginPage() {
   const { redirect } = useSearch({ from: "/login" });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -41,7 +43,7 @@ function LoginPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const res = await signIn(email, password);
+    const res = await signIn(email, password, remember);
     setSubmitting(false);
     if (!res.ok) {
       toast.error(res.error);
@@ -145,6 +147,20 @@ function LoginPage() {
               />
             </div>
           </div>
+
+          <label className="mt-4 flex items-center gap-2.5 text-sm">
+            <Checkbox
+              checked={remember}
+              onCheckedChange={(v) => setRemember(v === true)}
+              aria-label="Remember me"
+            />
+            <span>
+              Remember me
+              <span className="text-muted-foreground block text-xs">
+                Stay signed in after you refresh the page.
+              </span>
+            </span>
+          </label>
 
           <Button type="submit" className="mt-6 w-full" disabled={submitting}>
             <LogIn className="size-4" /> Sign in

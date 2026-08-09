@@ -140,6 +140,10 @@ export const WorkspaceService = {
     return attempt("WorkspaceService.updateWorkspace", () => workspaceApi.updateWorkspace(input));
   },
 
+  async removeWorkspace(id: string): Promise<Result<void>> {
+    return attempt("WorkspaceService.removeWorkspace", () => workspaceApi.deleteWorkspace(id));
+  },
+
   /** Ensures a workspace id is unique against the ids already known locally. */
   uniqueId(name: string, taken: string[]): string {
     const base = workspaceApi.slugifyWorkspaceName(name) || `workspace-${Date.now()}`;

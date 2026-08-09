@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
+import { BackendStatus } from "@/components/app/BackendStatus";
 import { RoleGate } from "@/components/app/RoleGate";
 import { StatCard } from "@/components/app/StatCard";
 import { Pipeline } from "@/components/app/Pipeline";
@@ -18,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ReviewBadge } from "@/components/app/badges";
 import { AsyncSection } from "@/components/app/AsyncState";
 import { useServiceQuery } from "@/hooks/useServiceQuery";
-import { AnalyticsService, ContentService } from "@/services";
+import { AdminService, AnalyticsService, ContentService } from "@/services";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
 
 export const Route = createFileRoute("/admin")({
@@ -48,8 +49,10 @@ function AdminDashboard() {
   const analytics = useServiceQuery(["analytics", workspaceId], () =>
     AnalyticsService.get({ workspaceId, range: "30d" }),
   );
+  const overview = useServiceQuery(["admin", "overview"], () => AdminService.overview());
   const documents = catalogue.data?.documents ?? [];
   const history = catalogue.data?.history ?? [];
+  const stats = overview.data;
 
   return (
     <AppShell
@@ -70,32 +73,36 @@ function AdminDashboard() {
         </>
       }
     >
+      <div className="mb-6">
+        <BackendStatus />
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Documents"
-          value="5"
-          delta="990 chunks indexed"
+          value={stats ? String(stats.documents) : "—"}
+          delta={overview.isPending ? "Loading…" : "Indexed across every workspace"}
           icon={FileStack}
           index={0}
         />
         <StatCard
           label="Questions generated"
-          value="480"
-          delta="+91 this week"
+          value={stats ? String(stats.questions) : "—"}
+          delta={overview.isPending ? "Loading…" : "Across all reviewable generations"}
           icon={ListChecks}
           index={1}
         />
         <StatCard
           label="Grounding success"
-          value="98.4%"
-          delta="Every claim cites a chunk"
+          value={stats && stats.grounding != null ? `${stats.grounding.toFixed(1)}%` : "—"}
+          delta={overview.isPending ? "Loading…" : "Mean citation coverage"}
           icon={ShieldCheck}
           index={2}
         />
         <StatCard
           label="Avg. quality"
-          value="9.3 / 10"
-          delta="+0.4 vs last month"
+          value={stats && stats.quality != null ? `${stats.quality.toFixed(1)} / 10` : "—"}
+          delta={overview.isPending ? "Loading…" : "Mean review score"}
           icon={Gauge}
           index={3}
         />

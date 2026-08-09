@@ -6,13 +6,6 @@ import type { GetModelsResponse, ModelInfo } from "@/types/api/analytics.contrac
 
 export const AVAILABLE_MODELS: ModelInfo[] = [
   {
-    id: "mock",
-    name: "Mock",
-    vendor: "Local",
-    desc: "Fast, deterministic responses for demos",
-    available: true,
-  },
-  {
     id: "gemini",
     name: "Gemini 1.5",
     vendor: "Google",
@@ -24,14 +17,14 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
     name: "Kimi K2",
     vendor: "Moonshot",
     desc: "Long-context reasoning",
-    available: true,
+    available: false,
   },
   {
     id: "nvidia",
     name: "Nvidia Nemotron",
     vendor: "OpenRouter",
     desc: "High-precision science tasks",
-    available: true,
+    available: false,
   },
 ];
 
@@ -42,5 +35,7 @@ export async function getModels(): Promise<GetModelsResponse> {
 }
 
 export function getDefaultModelId(): string {
-  return AVAILABLE_MODELS.some((m) => m.id === env.DEFAULT_MODEL) ? env.DEFAULT_MODEL : "mock";
+  return AVAILABLE_MODELS.some((m) => m.id === env.DEFAULT_MODEL && m.available)
+    ? env.DEFAULT_MODEL
+    : "gemini";
 }

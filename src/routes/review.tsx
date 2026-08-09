@@ -13,6 +13,7 @@ import {
   Pencil,
   Quote,
   ShieldCheck,
+  UserRound,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ReviewBadge, NeutralBadge, DifficultyBadge } from "@/components/app/badges";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { ExportService, ReviewService } from "@/services";
 import { REVIEW_STATUS_TO_STATE } from "@/services/ReviewService";
 import { KIND_TO_AGENT } from "@/services/HistoryService";
@@ -30,7 +32,7 @@ import type { GeneratedQuestion, ReviewState } from "@/types/domain";
 import type { WsAuditEntry } from "@/types/domain";
 import type { Citation } from "@/types/domain";
 import type { ReviewItem } from "@/types/api/review.contracts";
-import type { DbGeneration, DbReview, GenerationKind, ReviewStatus } from "@/types/database.types";
+import type { DbGenerationWithCreator, DbReview, GenerationKind, ReviewStatus } from "@/types/database.types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -73,6 +75,8 @@ interface ReviewableItem {
   agent: string;
   doc: string;
   created: string;
+  creatorName: string | null;
+  workspaceName: string | null;
   review: ReviewState;
   flags: string[];
   prompt: string;
@@ -117,7 +121,7 @@ function reviewStateFromStatus(status: ReviewStatus): ReviewState {
 }
 
 /** Map a FastAPI review item (mock mode) onto the shared queue shape. */
-function reviewItemToQueueItem(item: ReviewItem): ReviewableItem[] {
+function reviewItemToQueueItem(item: ReviewItem, workspaceName: string): ReviewableItem[] {
   const questions = (item.payload?.questions ?? []) as Partial<GeneratedQuestion>[];
   const kind = item.kind as GenerationKind;
   return questions
@@ -131,6 +135,8 @@ function reviewItemToQueueItem(item: ReviewItem): ReviewableItem[] {
       agent: KIND_TO_AGENT[kind] ?? item.kind,
       doc: item.id,
       created: (item.created_at ?? "").slice(0, 16).replace("T", " "),
+      creatorName: null,
+      workspaceName,
       review: reviewStateFromItem(item),
       flags: [],
       prompt: String(q.prompt ?? item.id),
@@ -161,7 +167,7 @@ function reviewStateFromItem(item: ReviewItem): ReviewState {
 }
 
 /** Flatten a Supabase generation payload into queue items (per generator kind). */
-function generationToItems(g: DbGeneration): ReviewableItem[] {
+function generationToItems(g: DbGenerationWithCreator): ReviewableItem[] {
   const payload = (g.payload ?? {}) as Record<string, unknown>;
   const base = {
     generationId: g.id,
@@ -170,6 +176,8 @@ function generationToItems(g: DbGeneration): ReviewableItem[] {
     agent: KIND_TO_AGENT[g.kind] ?? g.kind,
     doc: g.title ?? g.kind,
     created: (g.created_at ?? "").slice(0, 16).replace("T", " "),
+    creatorName: g.creator_name,
+    workspaceName: g.workspace_name,
     review: reviewStateFromStatus(g.review_status),
   };
 
@@ -267,6 +275,11 @@ function reviewsToAudit(reviews: DbReview[]): WsAuditEntry[] {
 
 function Review() {
   const { active, data, setReview, addAudit } = useWorkspace();
+  const { user } = useAuth();
+  // Staff (reviewer/admin) review every workspace's queue; the workspace
+  // switcher must not scope the queue down to the staff member's own
+  // workspace. Owners (non-staff) see their own workspace.
+  const isStaff = user?.role === "reviewer" || user?.role === "admin";
   const [filter, setFilter] = useState<FilterId>("all");
   const [comments, setComments] = useState<Record<string, string>>({});
   const [items, setItems] = useState<ReviewableItem[]>([]);
@@ -285,7 +298,9 @@ function Review() {
       }
       void Promise.all([getReviewItems(activeId), ReviewService.auditHistory(activeId)])
         .then(([res, history]) => {
-          setItems(res.items.flatMap(reviewItemToQueueItem));
+          setItems(
+            res.items.flatMap((item) => reviewItemToQueueItem(item, active?.name ?? "Workspace")),
+          );
           setAudit(history);
         })
         .catch(() => {
@@ -294,9 +309,9 @@ function Review() {
         });
       return;
     }
-    // Real mode: staff read every workspace (RLS), owners read their own — an
-    // empty workspace id resolves to the staff-wide queue.
-    void ReviewService.hydrateQueue(activeId)
+    // Real mode: staff read EVERY workspace (staff-wide queue); owners read
+    // their own. Omitting the workspace id resolves to the staff-wide path.
+    void ReviewService.hydrateQueue(isStaff ? undefined : activeId)
       .then(({ generations, reviews }) => {
         const reviewByItem = new Map(reviews.map((r) => [r.item_id, r]));
         setItems(
@@ -316,7 +331,7 @@ function Review() {
         setItems([]);
         setAudit([]);
       });
-  }, [activeId]);
+  }, [activeId, active, isStaff]);
 
   useEffect(() => {
     hydrate();
@@ -563,6 +578,18 @@ function ReviewItem({
           <span className="text-muted-foreground">
             {q.agent} · {q.doc} · {q.created}
           </span>
+          {q.workspaceName && (
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              <BookOpen className="size-3.5" />
+              {q.workspaceName}
+            </span>
+          )}
+          {q.creatorName && (
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              <UserRound className="size-3.5" />
+              {q.creatorName}
+            </span>
+          )}
           {q.grounded > 0 && (
             <span
               className={cn(

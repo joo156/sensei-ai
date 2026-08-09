@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { useState } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -13,10 +14,16 @@ import {
   Sparkles,
 } from "lucide-react";
 import { AppShell } from "@/components/app/AppShell";
-import { BackendStatus } from "@/components/app/BackendStatus";
 import { RoleGate } from "@/components/app/RoleGate";
 import { NoActiveWorkspace } from "@/components/app/AsyncState";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
@@ -24,6 +31,7 @@ import { useServiceQuery } from "@/hooks/useServiceQuery";
 import { FavoriteService } from "@/services";
 import { TeamSection } from "@/components/app/TeamSection";
 import type { WsDoc } from "@/types/domain";
+import type { FlashcardFavorite } from "@/types/database.types";
 
 export const Route = createFileRoute("/home")({
   head: () => ({
@@ -92,7 +100,10 @@ function createdLabel(uploaded: string): string {
 function StudentHome() {
   const { user } = useAuth();
   const { active, data } = useWorkspace();
-  const favorites = useServiceQuery(["favorites"], () => FavoriteService.list());
+  const favorites = useServiceQuery(["favorites", active?.id ?? "none"], () =>
+    FavoriteService.list(active?.id),
+  );
+  const [openFavorite, setOpenFavorite] = useState<FlashcardFavorite | null>(null);
   const name = user?.name.split(" ")[0] ?? "there";
   const latest = [...data.docs].sort((a, b) => b.uploaded.localeCompare(a.uploaded))[0];
   const favoriteCards = favorites.data ?? [];
@@ -117,10 +128,6 @@ function StudentHome() {
         <NoActiveWorkspace />
       ) : (
         <>
-          {/* Backend / auth connection proof (real API probes) */}
-          <div className="mb-6">
-            <BackendStatus />
-          </div>
           {/* Continue studying */}
           <section className="surface-card overflow-hidden">
             <div className="mesh-bg grid gap-4 p-6 md:grid-cols-[1fr_auto] md:items-center">
@@ -280,15 +287,39 @@ function StudentHome() {
                   </p>
                 ) : (
                   favoriteCards.slice(0, 4).map((f) => (
-                    <div
+                    <button
                       key={f.id}
-                      className="border-border bg-muted/40 rounded-lg border px-3 py-2 text-sm"
+                      type="button"
+                      onClick={() => setOpenFavorite(f)}
+                      className="border-border bg-muted/40 hover:border-primary/40 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors"
                     >
-                      {f.front}
-                    </div>
+                      <span className="min-w-0 flex-1 truncate">{f.front}</span>
+                      <span className="text-muted-foreground shrink-0 text-xs">
+                        {f.topic ?? "flashcard"}
+                      </span>
+                    </button>
                   ))
                 )}
               </div>
+
+              <Dialog
+                open={openFavorite !== null}
+                onOpenChange={(open) => {
+                  if (!open) setOpenFavorite(null);
+                }}
+              >
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="pr-6">{openFavorite?.front}</DialogTitle>
+                    {openFavorite?.topic ? (
+                      <DialogDescription>{openFavorite.topic}</DialogDescription>
+                    ) : null}
+                  </DialogHeader>
+                  <p className="text-muted-foreground text-sm">
+                    {openFavorite?.back ?? "No answer saved for this flashcard."}
+                  </p>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
           <div className="-mx-4 mt-10 sm:-mx-6 lg:-mx-10">

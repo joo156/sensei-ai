@@ -27,7 +27,7 @@ export const env = {
   /** When true, the API layer resolves from `src/mock` instead of the network. */
   ENABLE_MOCK: readBool("VITE_ENABLE_MOCK", true),
   /** Default AI provider id used by the model selector. */
-  DEFAULT_MODEL: readEnv("VITE_DEFAULT_MODEL", "mock"),
+  DEFAULT_MODEL: readEnv("VITE_DEFAULT_MODEL", "gemini"),
 } as const;
 
 export type AppEnv = typeof env;
